@@ -48,10 +48,10 @@ def require_dune_key() -> str:
 
 
 def run_graduations(conn: sqlite3.Connection, start: date, end: date) -> None:
-    from dune_client.client import DuneClient  # optional dependency
-    from dune_client.query import QueryBase
+    key = require_dune_key()
+    from dune_client.client import DuneClient  # optional dependency: pip install -e '.[dune]'
 
-    client = DuneClient(require_dune_key())
+    client = DuneClient(key)
     for day in pending_days(conn, "fr1", start, end):
         mark(conn, "fr1", day, "running")
         try:
