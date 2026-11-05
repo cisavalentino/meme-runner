@@ -177,12 +177,28 @@ def main(argv: list[str] | None = None) -> int:
         from .collector import next_wakeup, run_once
         from .config import DISCOVERY_POLL_SEC
         _, rpc, dexs, gecko = clients()
+
+        def candle_worker() -> None:
+            """Candle backlog in its own thread: it shares the Gecko rate limiter
+            with the loop, so it takes all Gecko capacity the live steps leave."""
+            from .ingest import fetch_candles
+            c2 = db.connect(a.db)
+            while True:
+                try:
+                    n = fetch_candles(c2, gecko, limit=5)
+                except Exception:
+                    logging.getLogger(__name__).exception("candle worker")
+                    n = 0
+                if n == 0:
+                    time.sleep(30)
+
+        import threading
+        threading.Thread(target=candle_worker, name="candles", daemon=True).start()
         while True:
             now = datetime.now(timezone.utc)
-            until = time.monotonic() + DISCOVERY_POLL_SEC
             from .http import redact_url
             print(redact_url(json.dumps({"at": now.isoformat(timespec="seconds"),
-                              **run_once(conn, rpc, dexs, gecko, now, candles_per_step=None, candles_until=until)})),
+                              **run_once(conn, rpc, dexs, gecko, now, candles_per_step=0)})),
                   flush=True)
             if a.once:
                 break
