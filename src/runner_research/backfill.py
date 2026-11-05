@@ -9,7 +9,7 @@ import sqlite3
 from datetime import date, timedelta
 from importlib.resources import files
 
-from .db import now_iso, upsert
+from .db import norm_ts, now_iso, upsert
 
 
 def daterange(start: date, end: date):
@@ -60,14 +60,14 @@ def run_graduations(conn: sqlite3.Connection, start: date, end: date) -> None:
             rows = res.result.rows if res.result else []
             upsert(conn, "tokens", [{
                 "mint": r["mint"], "name": r.get("name"), "symbol": r.get("symbol"),
-                "creator": r.get("creator"), "created_at": r.get("created_at"),
-                "graduated_at": r["graduated_at"], "launchpad": "pumpfun",
+                "creator": r.get("creator"), "created_at": norm_ts(r.get("created_at")),
+                "graduated_at": norm_ts(r["graduated_at"]), "launchpad": "pumpfun",
                 "canonical_pool": r["canonical_pool"], "bonding_minutes": r.get("bonding_minutes"),
                 "source": "dune",
             } for r in rows], key=("mint",))
             upsert(conn, "pools", [{
                 "pool": r["canonical_pool"], "mint": r["mint"], "dex": "pumpswap",
-                "created_at": r["graduated_at"], "is_canonical": 1, "source": "dune",
+                "created_at": norm_ts(r["graduated_at"]), "is_canonical": 1, "source": "dune",
             } for r in rows if r.get("canonical_pool")], key=("pool",))
             mark(conn, "fr1", day, "done", rows=len(rows))
         except Exception as e:  # keep going; failed days stay pending for the next run

@@ -41,3 +41,13 @@ class FakePoolRules:
 
 DEFAULT_LABEL_RULES = LabelRules()
 DEFAULT_FAKE_RULES = FakePoolRules()
+
+# FR4
+FEATURE_CUTOFF_MIN = 60          # features use data up to T0 + 1h only
+SNIPER_WINDOW_SEC = 120          # "bought in the first 2 minutes"
+PUMPFUN_SUPPLY = 1_000_000_000   # fixed pump.fun supply, for mcap from price
+
+# FR7 first question
+Q1_MIN_MULT_1H = 4.0
+Q1_MIN_FRAC_OF_PEAK_24H = 0.5    # peak measured over 0–24h only (as known at 24h)
+POSITIVE_LABELS = ("slow_climb", "runner_other")

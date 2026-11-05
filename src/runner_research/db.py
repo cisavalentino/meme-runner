@@ -105,6 +105,21 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def norm_ts(v) -> str | None:
+    """Normalize any timestamp (ISO, Dune '2026-08-01 12:00:00.000 UTC', datetime)
+    to UTC ISO-8601 with seconds, so string comparison in SQL is chronological."""
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        d = v
+    else:
+        s = str(v).strip().replace(" UTC", "+00:00").replace("Z", "+00:00")
+        d = datetime.fromisoformat(s)
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=timezone.utc)
+    return d.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
 def connect(path: str | os.PathLike | None = None) -> sqlite3.Connection:
     path = path or os.environ.get("RR_DB_PATH", "data/runner.sqlite")
     if str(path) != ":memory:":
