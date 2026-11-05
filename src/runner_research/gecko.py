@@ -85,7 +85,10 @@ class Gecko:
         self.base = DEMO if (use_key and key) else PUBLIC
         self.headers = {"x-cg-demo-api-key": key} if (use_key and key) else {}
 
+    calls = 0
+
     def get(self, path: str, **params) -> dict:
+        self.calls += 1
         return self.api.get_json(f"{self.base}/{path}", params=params or None, headers=self.headers)
 
     def ohlcv_5m(self, pool: str, before_ts: int | None = None, limit: int = 1000) -> list[dict]:

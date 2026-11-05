@@ -86,9 +86,10 @@ def status(conn) -> None:
         "with_creator": q("SELECT COUNT(*) FROM tokens WHERE creator IS NOT NULL"),
         "rpc_backfill_reached": db.get_state(conn, "rpc_oldest_ts"),
         "collector_heartbeat": json.loads(db.get_state(conn, "collector_heartbeat") or "null"),
-        "candles_pending": q("""SELECT COUNT(*) FROM tokens t WHERE t.canonical_pool IS NOT NULL
-            AND t.graduated_at <= strftime('%Y-%m-%dT%H:%M:%S', 'now', '-72 hours', '-10 minutes')
-            AND NOT EXISTS (SELECT 1 FROM job_runs j WHERE j.job='fr2' AND j.day=t.mint AND j.status='done')"""),
+        "candles_pending_sampled": len(__import__("runner_research.ingest", fromlist=["x"]).candles_pending(
+            conn, datetime.now(timezone.utc))),
+        "live_since": db.get_state(conn, "live_since"),
+        "cg_demo_calls_this_month": db.get_state(conn, f"cg_demo_calls:{datetime.now(timezone.utc):%Y-%m}"),
         "candles_done": q("SELECT COUNT(*) FROM job_runs WHERE job='fr2' AND status='done'"),
         "candles_empty": q("SELECT COUNT(*) FROM job_runs WHERE job='fr2' AND status='done' AND rows=0"),
         "candles_failed": q("SELECT COUNT(*) FROM job_runs WHERE job='fr2' AND status='failed'"),
@@ -123,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="fetch creation time (1–3 RPC calls/token); auto = only with a private RPC")
 
     bc = sub.add_parser("backfill-candles", help="FR2: 5m candles from GeckoTerminal for closed 72h windows")
-    bc.add_argument("--sample", type=float, default=1.0, help="share of tokens (by mint hash)")
+    bc.add_argument("--sample", type=float, default=1.0, help="multiplies the live/historical samples")
     bc.add_argument("--limit", type=int, default=None)
 
     col = sub.add_parser("collect", help="FR3: live collector loop (discovery, snapshots, trades, candles)")
@@ -178,22 +179,48 @@ def main(argv: list[str] | None = None) -> int:
         from .config import DISCOVERY_POLL_SEC
         _, rpc, dexs, gecko = clients()
 
-        def candle_worker() -> None:
-            """Candle backlog in its own thread: it shares the Gecko rate limiter
-            with the loop, so it takes all Gecko capacity the live steps leave."""
+        import threading
+        from .config import CG_DEMO_MONTHLY_CAP
+        from .gecko import Gecko
+        if db.get_state(conn, "live_since") is None:
+            db.set_state(conn, "live_since", datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        claimed: set[str] = set()
+        claim_lock = threading.Lock()
+
+        def claim(mint: str) -> bool:
+            with claim_lock:
+                if mint in claimed:
+                    return False
+                claimed.add(mint)
+                return True
+
+        def candle_worker(g, budget_key: str | None) -> None:
+            """Candle backlog lanes. The public lane shares the Gecko limiter with
+            the live steps; the CoinGecko demo lane stops at its monthly cap."""
             from .ingest import fetch_candles
             c2 = db.connect(a.db)
+            log = logging.getLogger(__name__)
             while True:
+                month_key = f"{budget_key}:{datetime.now(timezone.utc):%Y-%m}" if budget_key else None
+                used = int(db.get_state(c2, month_key) or 0) if month_key else 0
+                if month_key and used >= CG_DEMO_MONTHLY_CAP:
+                    time.sleep(3600)
+                    continue
+                before = g.calls
                 try:
-                    n = fetch_candles(c2, gecko, limit=5)
+                    n = fetch_candles(c2, g, limit=5, claim=claim)
                 except Exception:
-                    logging.getLogger(__name__).exception("candle worker")
+                    log.exception("candle worker %s", budget_key or "public")
                     n = 0
+                if month_key:
+                    db.set_state(c2, month_key, str(int(db.get_state(c2, month_key) or 0) + g.calls - before))
                 if n == 0:
                     time.sleep(30)
 
-        import threading
-        threading.Thread(target=candle_worker, name="candles", daemon=True).start()
+        threading.Thread(target=candle_worker, args=(gecko, None), name="candles", daemon=True).start()
+        if os.environ.get("GECKOTERMINAL_API_KEY"):
+            threading.Thread(target=candle_worker, args=(Gecko(gecko.api, use_key=True), "cg_demo_calls"),
+                             name="candles-cg", daemon=True).start()
         while True:
             now = datetime.now(timezone.utc)
             from .http import redact_url

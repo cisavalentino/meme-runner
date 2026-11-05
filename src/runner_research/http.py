@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 # under its nominal limit. DexScreener /tokens and /token-pairs: 300/min (docs).
 # Public Solana RPC: 100 req / 10 s per IP, 40 / 10 s per method.
 DEFAULT_LIMITS = {
-    "api.geckoterminal.com": 12,
+    "api.geckoterminal.com": 6,             # measured: ~5–6/min sustained from this IP
     "api.coingecko.com": 25,
     "api.dexscreener.com": 240,
     "api.mainnet-beta.solana.com": 120,

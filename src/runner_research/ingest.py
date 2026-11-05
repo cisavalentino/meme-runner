@@ -104,7 +104,15 @@ def scan_forward(conn: sqlite3.Connection, rpc: SolanaRpc, with_created_at: bool
     return n
 
 
-def candles_pending(conn: sqlite3.Connection, now: datetime, sample: float = 1.0) -> list[sqlite3.Row]:
+def candles_pending(conn: sqlite3.Connection, now: datetime, sample: float = 1.0,
+                    historical_sample: float | None = None) -> list[sqlite3.Row]:
+    """Tokens whose 72h window closed and that still need candles. Live tokens
+    (graduated after state `live_since`) come first, all of them; older tokens
+    follow oldest first, on a hash sample of `historical_sample` (default
+    config.CANDLE_SAMPLE_HISTORICAL; `sample` multiplies both)."""
+    from .config import CANDLE_SAMPLE_HISTORICAL
+    hs = CANDLE_SAMPLE_HISTORICAL if historical_sample is None else historical_sample
+    live_since = db.get_state(conn, "live_since")
     cutoff = (now - timedelta(hours=WINDOW_HOURS, minutes=10)).isoformat()
     rows = conn.execute(
         """SELECT t.mint, t.canonical_pool, t.graduated_at FROM tokens t
@@ -112,23 +120,31 @@ def candles_pending(conn: sqlite3.Connection, now: datetime, sample: float = 1.0
              AND NOT EXISTS (SELECT 1 FROM candles_5m c WHERE c.pool = t.canonical_pool)
              AND NOT EXISTS (SELECT 1 FROM job_runs j WHERE j.job = 'fr2' AND j.day = t.mint
                              AND (j.status = 'done' OR j.updated_at > ?))  -- failed: retry hourly
-           ORDER BY t.graduated_at DESC""", (cutoff, (now - timedelta(hours=1)).isoformat(timespec="seconds"))).fetchall()
-    return [r for r in rows if sampled(r["mint"], sample)]
+           ORDER BY t.graduated_at""", (cutoff, (now - timedelta(hours=1)).isoformat(timespec="seconds"))).fetchall()
+    live = [r for r in rows if live_since and r["graduated_at"] >= live_since and sampled(r["mint"], sample)]
+    hist = [r for r in rows if not (live_since and r["graduated_at"] >= live_since)
+            and sampled(r["mint"], sample * hs)]
+    return live + hist
 
 
 def fetch_candles(conn: sqlite3.Connection, gecko: Gecko, now: datetime | None = None,
                   sample: float = 1.0, limit: int | None = None, deadline: float | None = None,
-                  min_count: int = 0) -> int:
+                  min_count: int = 0, claim=None, historical_sample: float | None = None) -> int:
     """One OHLCV call per token (1000 x 5m = 83h back from T0+72h covers the window).
     Stops at `deadline` (monotonic) once at least `min_count` tokens were tried.
+    `claim(mint) -> bool` lets parallel workers skip tokens another one took.
     job_runs(job='fr2', day=<mint>) marks tokens done, including empty ones."""
     now = now or datetime.now(timezone.utc)
     done = 0
     import time
     tried = 0
-    for r in candles_pending(conn, now, sample)[:limit]:
+    for r in candles_pending(conn, now, sample, historical_sample):
+        if limit is not None and tried >= limit:
+            break
         if deadline is not None and tried >= min_count and time.monotonic() >= deadline:
             break
+        if claim is not None and not claim(r["mint"]):
+            continue
         tried += 1
         t0 = datetime.fromisoformat(r["graduated_at"])
         g0, end = grid_t0(t0), t0 + timedelta(hours=WINDOW_HOURS)

@@ -284,3 +284,25 @@ def test_gecko_404_is_empty_and_other_errors_retry_hourly(conn):
     ingest.fetch_candles(conn, G404(500), wall)
     assert ingest.candles_pending(conn, wall) == []                        # failed: not retried within the hour
     assert len(ingest.candles_pending(conn, wall + timedelta(hours=2))) == 1
+
+
+def test_candles_live_first_then_sampled_history_oldest_first(conn):
+    db.set_state(conn, "live_since", (T0 + timedelta(days=1)).isoformat())
+    rows = [{"mint": f"H{i:03d}", "graduated_at": (T0 - timedelta(minutes=i)).isoformat(), "canonical_pool": f"PH{i}",
+             "source": "t"} for i in range(300)]
+    rows += [{"mint": f"L{i}", "graduated_at": (T0 + timedelta(days=1, minutes=i)).isoformat(),
+              "canonical_pool": f"PL{i}", "source": "t"} for i in range(5)]
+    db.upsert(conn, "tokens", rows, key=("mint",))
+    p = ingest.candles_pending(conn, T0 + timedelta(days=5), historical_sample=0.3)
+    assert [r["mint"] for r in p[:5]] == [f"L{i}" for i in range(5)]          # all live, first
+    hist = [r["graduated_at"] for r in p[5:]]
+    assert hist == sorted(hist) and 60 < len(hist) < 120                       # ~30%, oldest first
+
+
+def test_claim_prevents_double_fetch(conn):
+    for i in range(4):
+        db.upsert(conn, "tokens", [{"mint": f"M{i}", "graduated_at": T0.isoformat(), "canonical_pool": f"P{i}",
+                                    "source": "t"}], key=("mint",))
+    taken = {"M0", "M1"}
+    n = ingest.fetch_candles(conn, FakeGecko(), T0 + timedelta(days=4), claim=lambda m: m not in taken)
+    assert n == 2 and len(ingest.candles_pending(conn, T0 + timedelta(days=4))) == 2

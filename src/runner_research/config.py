@@ -60,4 +60,8 @@ POSITIVE_LABELS = ("slow_climb", "runner_other")
 # deterministic hash sample of mints (unbiased; missing features stay missing).
 GECKO_DETAIL_SAMPLE = 0.2        # share of graduations that get trades + holders
 TRADE_POLL_EVERY_MIN = 10        # trades endpoint returns only the last 300 trades
+# Candles: tokens graduated after the collector went live (state `live_since`) all get
+# candles; older (backfilled) tokens get a hash sample, oldest first.
+CANDLE_SAMPLE_HISTORICAL = 0.3
+CG_DEMO_MONTHLY_CAP = 9500       # CoinGecko demo key: 10k calls/month; second candle lane
 DISCOVERY_POLL_SEC = 15        # one getSignaturesForAddress per loop (1 Helius credit)
