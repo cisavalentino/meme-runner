@@ -229,3 +229,58 @@ def test_run_once_end_to_end(conn, monkeypatch):
     out = collector.run_once(conn, rpc, FakeDexs(), FakeGecko(), later, candles_per_step=10)
     assert out["candles"] == 4
     assert conn.execute("SELECT COUNT(*) FROM candles_5m").fetchone()[0] > 0
+
+
+def test_label_only_new_skips_labeled(conn):
+    from runner_research.pipeline import label_tokens
+    seed_token(conn, "A", T0, [(0, 1), (2, 3)])
+    now = T0 + timedelta(days=4)
+    assert label_tokens(conn, now=now, only_new=True) == 1
+    assert label_tokens(conn, now=now, only_new=True) == 0
+    assert label_tokens(conn, now=now) == 1
+
+
+def test_fetch_candles_stops_at_deadline(conn):
+    import time
+    for i in range(3):
+        db.upsert(conn, "tokens", [{"mint": f"M{i}", "graduated_at": T0.isoformat(), "canonical_pool": f"P{i}",
+                                    "source": "test"}], key=("mint",))
+    later = T0 + timedelta(days=4)
+    assert ingest.fetch_candles(conn, FakeGecko(), later, deadline=time.monotonic() - 1) == 0
+    assert ingest.fetch_candles(conn, FakeGecko(), later, deadline=time.monotonic() + 60) == 3
+    assert ingest.candles_pending(conn, later) == []
+
+
+def test_rpc_urls(monkeypatch):
+    from runner_research import cli
+    from runner_research.solana import RPC_URL
+    monkeypatch.delenv("RR_SOLANA_RPC", raising=False)
+    assert cli.rpc_urls() == [RPC_URL]
+    monkeypatch.setenv("RR_SOLANA_RPC", "https://h.example/?api-key=x")
+    monkeypatch.setenv("RR_RPC_WORKERS", "4")
+    assert cli.rpc_urls() == ["https://h.example/?api-key=x"] * 4
+
+
+def test_gecko_404_is_empty_and_other_errors_retry_hourly(conn):
+    import httpx
+
+    class G404(FakeGecko):
+        def __init__(self, code):
+            super().__init__()
+            self.code = code
+
+        def ohlcv_5m(self, pool, before_ts=None, limit=1000):
+            req = httpx.Request("GET", "https://x")
+            raise httpx.HTTPStatusError("err", request=req, response=httpx.Response(self.code, request=req))
+
+    db.upsert(conn, "tokens", [{"mint": "N", "graduated_at": T0.isoformat(), "canonical_pool": "PN", "source": "t"},
+                               {"mint": "E", "graduated_at": T0.isoformat(), "canonical_pool": "PE", "source": "t"}],
+              key=("mint",))
+    later = T0 + timedelta(days=4)
+    ingest.fetch_candles(conn, G404(404), later, limit=1)   # newest first; both same T0 -> one of them
+    st = dict(conn.execute("SELECT day, status FROM job_runs WHERE job='fr2'").fetchall())
+    assert list(st.values()) == ["done"]
+    wall = datetime.now(timezone.utc)  # job_runs.updated_at is wall-clock time
+    ingest.fetch_candles(conn, G404(500), wall)
+    assert ingest.candles_pending(conn, wall) == []                        # failed: not retried within the hour
+    assert len(ingest.candles_pending(conn, wall + timedelta(hours=2))) == 1

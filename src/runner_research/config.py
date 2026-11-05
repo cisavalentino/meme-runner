@@ -60,4 +60,4 @@ POSITIVE_LABELS = ("slow_climb", "runner_other")
 # deterministic hash sample of mints (unbiased; missing features stay missing).
 GECKO_DETAIL_SAMPLE = 0.2        # share of graduations that get trades + holders
 TRADE_POLL_EVERY_MIN = 10        # trades endpoint returns only the last 300 trades
-DISCOVERY_POLL_SEC = 30
+DISCOVERY_POLL_SEC = 15        # one getSignaturesForAddress per loop (1 Helius credit)

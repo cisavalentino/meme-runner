@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import hashlib
+
+import httpx
 import logging
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -66,7 +68,7 @@ def _migrations(rpc: SolanaRpc, sigs: list[dict], sample: float, end_ts: int | N
 
 
 def scan_backward(conn: sqlite3.Connection, rpc: SolanaRpc, start: datetime, end: datetime | None = None,
-                  sample: float = 1.0, max_pages: int | None = None) -> int:
+                  sample: float = 1.0, max_pages: int | None = None, with_created_at: bool = False) -> int:
     """Graduations in [start, end), newest first. Re-running resumes below the
     oldest page already stored; ranges newer than the first run are the live
     scanner's job."""
@@ -78,7 +80,7 @@ def scan_backward(conn: sqlite3.Connection, rpc: SolanaRpc, start: datetime, end
             break
         if db.get_state(conn, "rpc_newest_sig") is None:
             db.set_state(conn, "rpc_newest_sig", page[0]["signature"])
-        n += store_migrations(conn, rpc, _migrations(rpc, page, sample, end_ts))
+        n += store_migrations(conn, rpc, _migrations(rpc, page, sample, end_ts), with_created_at=with_created_at)
         db.set_state(conn, "rpc_oldest_sig", page[-1]["signature"])
         db.set_state(conn, "rpc_oldest_ts", datetime.fromtimestamp(page[-1]["blockTime"], timezone.utc).isoformat())
         pages += 1
@@ -108,26 +110,44 @@ def candles_pending(conn: sqlite3.Connection, now: datetime, sample: float = 1.0
         """SELECT t.mint, t.canonical_pool, t.graduated_at FROM tokens t
            WHERE t.canonical_pool IS NOT NULL AND t.graduated_at <= ?
              AND NOT EXISTS (SELECT 1 FROM candles_5m c WHERE c.pool = t.canonical_pool)
-             AND NOT EXISTS (SELECT 1 FROM job_runs j WHERE j.job = 'fr2' AND j.day = t.mint AND j.status = 'done')
-           ORDER BY t.graduated_at DESC""", (cutoff,)).fetchall()
+             AND NOT EXISTS (SELECT 1 FROM job_runs j WHERE j.job = 'fr2' AND j.day = t.mint
+                             AND (j.status = 'done' OR j.updated_at > ?))  -- failed: retry hourly
+           ORDER BY t.graduated_at DESC""", (cutoff, (now - timedelta(hours=1)).isoformat(timespec="seconds"))).fetchall()
     return [r for r in rows if sampled(r["mint"], sample)]
 
 
 def fetch_candles(conn: sqlite3.Connection, gecko: Gecko, now: datetime | None = None,
-                  sample: float = 1.0, limit: int | None = None) -> int:
+                  sample: float = 1.0, limit: int | None = None, deadline: float | None = None,
+                  min_count: int = 0) -> int:
     """One OHLCV call per token (1000 x 5m = 83h back from T0+72h covers the window).
+    Stops at `deadline` (monotonic) once at least `min_count` tokens were tried.
     job_runs(job='fr2', day=<mint>) marks tokens done, including empty ones."""
     now = now or datetime.now(timezone.utc)
     done = 0
+    import time
+    tried = 0
     for r in candles_pending(conn, now, sample)[:limit]:
+        if deadline is not None and tried >= min_count and time.monotonic() >= deadline:
+            break
+        tried += 1
         t0 = datetime.fromisoformat(r["graduated_at"])
         g0, end = grid_t0(t0), t0 + timedelta(hours=WINDOW_HOURS)
         try:
             rows = gecko.ohlcv_5m(r["canonical_pool"], before_ts=int(end.timestamp()) + 300)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code != 404:
+                rows = None
+                err = e
+            else:  # Gecko never indexed the pool: same as no candles
+                rows = []
         except Exception as e:
+            rows, err = None, e
+        if rows is None:
+            e = err
+            from .http import redact_url
             log.warning("ohlcv %s: %s", r["mint"], e)
             db.upsert(conn, "job_runs", [{"job": "fr2", "day": r["mint"], "status": "failed",
-                                          "detail": f"{type(e).__name__}: {e}"[:300], "updated_at": db.now_iso()}],
+                                          "detail": redact_url(f"{type(e).__name__}: {e}")[:300], "updated_at": db.now_iso()}],
                       key=("job", "day"))
             continue
         rows = [{**c, "pool": r["canonical_pool"], "source": "geckoterminal"} for c in rows

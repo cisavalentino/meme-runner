@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import random
+import re
 import threading
 import time
 from urllib.parse import urlsplit
@@ -17,11 +18,11 @@ log = logging.getLogger(__name__)
 # under its nominal limit. DexScreener /tokens and /token-pairs: 300/min (docs).
 # Public Solana RPC: 100 req / 10 s per IP, 40 / 10 s per method.
 DEFAULT_LIMITS = {
-    "api.geckoterminal.com": 20,
+    "api.geckoterminal.com": 12,
     "api.coingecko.com": 25,
     "api.dexscreener.com": 240,
     "api.mainnet-beta.solana.com": 120,
-    "mainnet.helius-rpc.com": 540,          # free plan: 10 req/s
+    "mainnet.helius-rpc.com": 1500,         # Developer plan (429s above ~25/s); RR_RATE_MAINNET_HELIUS_RPC_COM
     "api.dune.com": 30,
 }
 SECRET_HEADERS = {"x-dune-api-key", "authorization", "x-cg-pro-api-key", "x-cg-demo-api-key"}
@@ -98,6 +99,30 @@ class ApiClient:
 
     def close(self) -> None:
         self.http.close()
+
+
+_SECRET_QS = re.compile(r"((?:api[-_]?key|apikey|access[-_]?token|auth[-_]?token)=)[^&\s\"']+", re.I)
+
+
+def redact_url(text: str) -> str:
+    """Hide secrets passed as query parameters (e.g. Helius `?api-key=`)."""
+    return _SECRET_QS.sub(r"\1***", text)
+
+
+class RedactFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if record.exc_info and record.exc_info[1] is not None:
+            # format the traceback now so the secret never reaches a handler
+            record.exc_text = redact_url(logging.Formatter().formatException(record.exc_info))
+            record.exc_info = None
+        record.msg, record.args = redact_url(msg), None
+        return True
+
+
+def install_log_redaction() -> None:
+    for h in logging.getLogger().handlers:
+        h.addFilter(RedactFilter())
 
 
 def redact_headers(headers: dict) -> dict:

@@ -99,3 +99,13 @@ def test_transactions_spread_over_endpoints_keep_order():
     sigs = [f"s{i}" for i in range(9)]
     assert [t["sig"] for t in rpc.transactions(sigs)] == sigs
     assert set(seen) == {"a.example", "b.example"}
+
+
+def test_api_key_is_redacted_from_logs_and_errors(caplog):
+    import logging
+    from runner_research.http import RedactFilter, redact_url
+    url = "https://mainnet.helius-rpc.com/?api-key=abc-123&x=1"
+    assert redact_url(url) == "https://mainnet.helius-rpc.com/?api-key=***&x=1"
+    rec = logging.LogRecord("t", logging.WARNING, __file__, 1, "POST %s -> 429", (url,), None)
+    RedactFilter().filter(rec)
+    assert "abc-123" not in rec.getMessage()

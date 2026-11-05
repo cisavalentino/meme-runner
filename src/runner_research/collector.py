@@ -210,7 +210,10 @@ def finalize_trade_features(conn: sqlite3.Connection, now: datetime) -> int:
 
 # ---------------------------------------------------------------- loop
 
-def run_once(conn: sqlite3.Connection, rpc, dexs, gecko, now: datetime, candles_per_step: int = 3) -> dict:
+def run_once(conn: sqlite3.Connection, rpc, dexs, gecko, now: datetime, candles_per_step: int | None = 3,
+             candles_until: float | None = None) -> dict:
+    """Time-critical steps first; the candle backlog (live and backfilled tokens)
+    then uses whatever is left of the loop (`candles_until`, a monotonic time)."""
     from .ingest import fetch_candles, scan_forward
     out = {}
     steps = [
@@ -218,12 +221,16 @@ def run_once(conn: sqlite3.Connection, rpc, dexs, gecko, now: datetime, candles_
         ("snapshots", lambda: take_snapshots(conn, dexs, gecko, now)),
         ("trade_polls", lambda: poll_trades(conn, gecko, now)),
         ("trade_features", lambda: finalize_trade_features(conn, now)),
-        ("candles", lambda: fetch_candles(conn, gecko, now, limit=candles_per_step)),
+        # at least 2 per loop, so a slow snapshot/trade step can't starve the backlog
+        ("candles", lambda: fetch_candles(conn, gecko, now, limit=candles_per_step, deadline=candles_until,
+                                          min_count=2 if candles_until is not None else 0)),
     ]
     for name, fn in steps:
         try:
             out[name] = fn()
         except Exception as e:  # one failing source must not stop the others
             log.exception("collector step %s failed", name)
-            out[name] = f"error: {type(e).__name__}: {e}"[:200]
+            from .http import redact_url
+            out[name] = redact_url(f"error: {type(e).__name__}: {e}")[:200]
+    db.set_state(conn, "collector_heartbeat", json.dumps({"at": now.isoformat(timespec="seconds"), **out}))
     return out

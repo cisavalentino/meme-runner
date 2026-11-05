@@ -29,12 +29,17 @@ def graduation_price(conn: sqlite3.Connection, pool: str) -> float | None:
 
 
 def label_tokens(conn: sqlite3.Connection, now: datetime | None = None,
-                 rules: LabelRules = DEFAULT_LABEL_RULES, rule_version: str = RULE_VERSION) -> int:
+                 rules: LabelRules = DEFAULT_LABEL_RULES, rule_version: str = RULE_VERSION,
+                 only_new: bool = False) -> int:
+    """`only_new` skips tokens already labeled under `rule_version`; inputs of a
+    labeled token (candles, T+1h features) do not change after its window closed."""
     now = now or datetime.now(timezone.utc)
     cutoff = (now - timedelta(hours=WINDOW_HOURS)).isoformat()
     toks = conn.execute(
         "SELECT mint, canonical_pool, graduated_at FROM tokens "
-        "WHERE canonical_pool IS NOT NULL AND graduated_at <= ? ORDER BY graduated_at", (cutoff,)).fetchall()
+        "WHERE canonical_pool IS NOT NULL AND graduated_at <= ? "
+        + ("AND mint NOT IN (SELECT mint FROM labels WHERE rule_version = ?) " if only_new else "")
+        + "ORDER BY graduated_at", (cutoff, rule_version) if only_new else (cutoff,)).fetchall()
     out = []
     for t in toks:
         p0 = graduation_price(conn, t["canonical_pool"])

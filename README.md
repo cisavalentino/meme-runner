@@ -19,6 +19,25 @@ cp .env.example .env                      # optional keys; rr loads .env itself
 .venv/bin/rr status | check <mint-or-pool> | due
 ```
 
+## Live system (pm2)
+
+```bash
+pm2 start ecosystem.config.cjs && pm2 save   # pm2-mega.service restores it on boot
+pm2 ls; pm2 logs rr-collect; .venv/bin/rr status; .venv/bin/rr health
+```
+
+| App | What | When |
+|---|---|---|
+| `rr-collect` | discovery (15 s), snapshots, holders, trade polling, candle backlog in the rest of each loop | always, auto-restart |
+| `rr-backfill` | RPC graduations back to 2026-08-01, resumable | until done (exit 0 = stays stopped) |
+| `rr-daily` | `rr label` (new windows only) + `rr analyze` → `reports/analysis.json` | 00:20 UTC |
+| `rr-watchdog` | restarts `rr-collect` if its heartbeat is > 10 min old | every 10 min |
+
+`.env`: `RR_SOLANA_RPC` (Helius URL; 6 parallel workers, `RR_RPC_WORKERS`), keys are redacted
+from every log line. Helius cost: 1 credit per call; full backfill ≈ 1–1.5M credits, live ≈ 5k/day.
+GeckoTerminal (12 calls/min, shared by trades, holders and candles) is the slowest part: the
+candle backlog moves at ~8–10k tokens/day, newest first.
+
 ## Data sources
 
 | Need | Source | Cost |
