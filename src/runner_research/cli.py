@@ -119,6 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     a = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO if a.verbose else logging.WARNING,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per request is noise
     conn = db.connect(a.db)
     utc = lambda d: datetime.combine(d, datetime.min.time(), tzinfo=timezone.utc)
 
