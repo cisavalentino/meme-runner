@@ -10,11 +10,11 @@ import math
 import sqlite3
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Sequence
 
 from . import config
-from .labels import LABELS, Candle
+from .labels import LABELS, Candle, grid_t0
 from .pipeline import graduation_price, load_candles
 
 Z95 = 1.959963984540054
@@ -113,14 +113,19 @@ def q1_outcome(t0: datetime, p0: float, candles: Sequence[Candle]) -> tuple[floa
     return (m1 / p0, c24 >= config.Q1_MIN_FRAC_OF_PEAK_24H * max(window))
 
 
-def first_question(conn: sqlite3.Connection, start: datetime | None = None, end: datetime | None = None) -> dict:
+def first_question(conn: sqlite3.Connection, start: datetime | None = None, end: datetime | None = None,
+                   now: datetime | None = None) -> dict:
+    """Only tokens whose first 24h had fully elapsed by `now` (default: wall clock)
+    count; younger tokens would otherwise use their latest close as close@24h."""
+    now = now or datetime.now(timezone.utc)
     q = "SELECT mint, canonical_pool, graduated_at FROM tokens WHERE canonical_pool IS NOT NULL"
     toks = conn.execute(q).fetchall()
     allk = alln = gk = gn = 0
     for t in toks:
         t0 = datetime.fromisoformat(t["graduated_at"])
-        if (start and t0 < start) or (end and t0 >= end):
+        if (start and t0 < start) or (end and t0 >= end) or t0 + timedelta(hours=24) > now:
             continue
+        t0 = grid_t0(t0)
         p0 = graduation_price(conn, t["canonical_pool"])
         if not p0:
             continue
@@ -165,9 +170,12 @@ def out_of_time_model(rows: Sequence[Row], split: datetime, feature_names: list[
     Xte, yte = _matrix(test, names)
     model = make_pipeline(SimpleImputer(strategy="median", add_indicator=True, keep_empty_features=True),
                           StandardScaler(), LogisticRegression(max_iter=2000, class_weight="balanced"))
-    model.fit(Xtr, ytr)
     out = {"model": "logreg", "split": split.isoformat(), "features": names,
            "train_n": len(train), "train_pos": int(ytr.sum()), "test_n": len(test), "test_pos": int(yte.sum())}
+    if len(set(ytr)) < 2:
+        out["skipped"] = "training set has a single class"
+        return out
+    model.fit(Xtr, ytr)
     if len(set(yte)) == 2:
         p = model.predict_proba(Xte)[:, 1]
         out["test_auc"] = float(roc_auc_score(yte, p))

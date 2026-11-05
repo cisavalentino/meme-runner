@@ -77,18 +77,20 @@ def context_features(conn: sqlite3.Connection, mint: str) -> dict:
         "hour_utc": t0.hour,
         "same_name_7d": same_name_copies(conn, mint),
     }
+    # graduations so far on this UTC day, up to T0+1h only (no look-ahead)
     day = t0.date().isoformat()
     out["day_grad_count"] = conn.execute(
-        "SELECT COUNT(*) FROM tokens WHERE substr(graduated_at, 1, 10) = ?", (day,)).fetchone()[0]
+        "SELECT COUNT(*) FROM tokens WHERE substr(graduated_at, 1, 10) = ? AND graduated_at <= ?",
+        (day, asof.isoformat())).fetchone()[0]
 
     if tok["creator"]:
+        # The store only holds graduated tokens, so history = earlier graduations.
         prior = conn.execute(
-            "SELECT mint, graduated_at FROM tokens WHERE creator = ? AND created_at < ? AND mint != ?",
-            (tok["creator"], tok["created_at"], mint)).fetchall()
-        out["creator_prior_launches"] = len(prior)
-        out["creator_prior_graduated"] = sum(1 for p in prior if p["graduated_at"])
-        closed = [p["mint"] for p in prior if p["graduated_at"] and
-                  datetime.fromisoformat(p["graduated_at"]) + timedelta(hours=WINDOW_HOURS) <= asof]
+            "SELECT mint, graduated_at FROM tokens WHERE creator = ? AND graduated_at < ? AND mint != ?",
+            (tok["creator"], tok["graduated_at"], mint)).fetchall()
+        out["creator_prior_graduated"] = len(prior)
+        closed = [p["mint"] for p in prior
+                  if datetime.fromisoformat(p["graduated_at"]) + timedelta(hours=WINDOW_HOURS) <= asof]
         labs = [r[0] for r in conn.execute(
             f"SELECT label FROM labels WHERE mint IN ({','.join('?' * len(closed))})", closed)] if closed else []
         out["creator_prior_rugs"] = labs.count("rug")

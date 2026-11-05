@@ -43,7 +43,7 @@ def test_creator_history_has_no_lookahead(conn):
     seed_token(conn, "NEW", T0, [(0, 1), (2, 3)])
     label_tokens(conn, now=T0 + timedelta(days=10))
     f = context_features(conn, "NEW")
-    assert f["creator_prior_launches"] == 2
+    assert f["creator_prior_graduated"] == 2
     assert f["creator_prior_rugs"] == 1
 
 
