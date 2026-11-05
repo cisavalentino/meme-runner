@@ -81,3 +81,21 @@ def test_dexscreener_tokens_picks_canonical_pair():
 def test_dexscreener_token_pairs():
     pairs = dexscreener.parse_token_pairs(load("dexs_token_pairs.json"), MINT)
     assert POOL in {p["pool"] for p in pairs} and len(pairs) >= 2
+
+
+def test_transactions_spread_over_endpoints_keep_order():
+    import httpx
+    from runner_research.http import ApiClient
+
+    seen = []
+
+    def handler(req):
+        body = json.loads(req.content)
+        seen.append(req.url.host)
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"sig": body["params"][0]}})
+
+    api = ApiClient(transport=httpx.MockTransport(handler), limits={"a.example": 6000, "b.example": 6000})
+    rpc = solana.SolanaRpc(api, ["https://a.example", "https://b.example"])
+    sigs = [f"s{i}" for i in range(9)]
+    assert [t["sig"] for t in rpc.transactions(sigs)] == sigs
+    assert set(seen) == {"a.example", "b.example"}

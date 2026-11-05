@@ -58,16 +58,11 @@ def store_migrations(conn: sqlite3.Connection, rpc: SolanaRpc, migs: list[Migrat
 
 
 def _migrations(rpc: SolanaRpc, sigs: list[dict], sample: float, end_ts: int | None) -> list[Migration]:
-    out = []
-    for s in sigs:
-        if s.get("err") is not None or (end_ts and (s.get("blockTime") or 0) >= end_ts):
-            continue
-        if not sampled(s["signature"], sample):
-            continue
-        m = parse_migration(rpc.transaction(s["signature"]), s["signature"])
-        if m:
-            out.append(m)
-    return out
+    keep = [s["signature"] for s in sigs
+            if s.get("err") is None and not (end_ts and (s.get("blockTime") or 0) >= end_ts)
+            and sampled(s["signature"], sample)]
+    txs = rpc.transactions(keep) if hasattr(rpc, "transactions") else [rpc.transaction(k) for k in keep]
+    return [m for m in (parse_migration(tx, sig) for sig, tx in zip(keep, txs)) if m]
 
 
 def scan_backward(conn: sqlite3.Connection, rpc: SolanaRpc, start: datetime, end: datetime | None = None,

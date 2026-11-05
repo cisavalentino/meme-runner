@@ -166,7 +166,7 @@ def connect(path: str | os.PathLike | None = None) -> sqlite3.Connection:
     path = path or os.environ.get("RR_DB_PATH", "data/runner.sqlite")
     if str(path) != ":memory:":
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, timeout=60)  # collector and backfill may write concurrently
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
     return conn

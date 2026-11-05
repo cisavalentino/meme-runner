@@ -90,11 +90,17 @@ def mint_metadata(account: dict | None) -> dict:
 
 
 class SolanaRpc:
-    def __init__(self, api: ApiClient, url: str = RPC_URL):
-        self.api, self.url = api, url
+    """`urls[0]` serves signature paging and account reads. `transactions()`
+    spreads getTransaction over all urls in parallel: rate limits are per
+    endpoint (and per IP), so extra workers only help with extra endpoints."""
 
-    def call(self, method: str, params: list):
-        r = self.api.request("POST", self.url, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+    def __init__(self, api: ApiClient, url: str | list[str] = RPC_URL):
+        self.urls = [url] if isinstance(url, str) else list(url)
+        self.api, self.url = api, self.urls[0]
+
+    def call(self, method: str, params: list, url: str | None = None):
+        r = self.api.request("POST", url or self.url,
+                             json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
         d = r.json()
         if "error" in d:
             raise RuntimeError(f"rpc {method}: {d['error']}")
@@ -127,8 +133,25 @@ class SolanaRpc:
                 return
             before = page[-1]["signature"]
 
-    def transaction(self, sig: str) -> dict | None:
-        return self.call("getTransaction", [sig, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 1}])
+    def transaction(self, sig: str, url: str | None = None) -> dict | None:
+        return self.call("getTransaction", [sig, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 1}],
+                         url=url)
+
+    def transactions(self, sigs: list[str]) -> list[dict | None]:
+        """Same order as `sigs`; one worker per endpoint, each with its own rate limit."""
+        if len(self.urls) == 1 or len(sigs) < 2:
+            return [self.transaction(s) for s in sigs]
+        from concurrent.futures import ThreadPoolExecutor
+
+        def worker(k: int) -> list[tuple[int, dict | None]]:
+            return [(i, self.transaction(sigs[i], self.urls[k])) for i in range(k, len(sigs), len(self.urls))]
+
+        out: list[dict | None] = [None] * len(sigs)
+        with ThreadPoolExecutor(len(self.urls)) as ex:
+            for part in ex.map(worker, range(len(self.urls))):
+                for i, tx in part:
+                    out[i] = tx
+        return out
 
     def accounts(self, keys: list[str], encoding: str = "base64") -> list[dict | None]:
         out: list[dict | None] = []

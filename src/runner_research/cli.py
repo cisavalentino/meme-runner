@@ -34,8 +34,11 @@ def clients():
     from .solana import SolanaRpc
 
     api = ApiClient()
-    rpc_url = os.environ.get("RR_SOLANA_RPC")
-    rpc = SolanaRpc(api, rpc_url) if rpc_url else SolanaRpc(api)
+    # RR_SOLANA_RPC: one or more comma-separated endpoints (yours, e.g. Helius/QuickNode).
+    # The public endpoint is always added as one more transaction worker.
+    from .solana import RPC_URL
+    urls = [u.strip() for u in os.environ.get("RR_SOLANA_RPC", "").split(",") if u.strip()]
+    rpc = SolanaRpc(api, urls + ([RPC_URL] if RPC_URL not in urls else []))
     return api, rpc, DexScreener(api), Gecko(api)
 
 

@@ -3,6 +3,7 @@ exponential backoff on 429/5xx, and secrets kept out of logs."""
 from __future__ import annotations
 
 import logging
+import os
 import random
 import threading
 import time
@@ -20,6 +21,7 @@ DEFAULT_LIMITS = {
     "api.coingecko.com": 25,
     "api.dexscreener.com": 240,
     "api.mainnet-beta.solana.com": 120,
+    "mainnet.helius-rpc.com": 540,          # free plan: 10 req/s
     "api.dune.com": 30,
 }
 SECRET_HEADERS = {"x-dune-api-key", "authorization", "x-cg-pro-api-key", "x-cg-demo-api-key"}
@@ -54,15 +56,18 @@ class ApiClient:
                  sleep=time.sleep):
         self.limits = {**DEFAULT_LIMITS, **(limits or {})}
         self.buckets: dict[str, RateLimiter] = {}
+        self._lock = threading.Lock()
         self.max_retries = max_retries
         self.sleep = sleep
         self.http = httpx.Client(timeout=timeout, transport=transport,
                                  headers={"User-Agent": "runner-research/0.1"})
 
     def _bucket(self, host: str) -> RateLimiter:
-        if host not in self.buckets:
-            self.buckets[host] = RateLimiter(self.limits.get(host, 30), sleep=self.sleep)
-        return self.buckets[host]
+        with self._lock:  # called from transaction workers
+            if host not in self.buckets:
+                env = os.environ.get("RR_RATE_" + host.replace(".", "_").replace("-", "_").upper())
+                self.buckets[host] = RateLimiter(float(env) if env else self.limits.get(host, 30), sleep=self.sleep)
+            return self.buckets[host]
 
     def request(self, method: str, url: str, **kw) -> httpx.Response:
         host = urlsplit(url).hostname or ""
