@@ -51,16 +51,19 @@ class CheckResult:
 
 
 def same_name_copies(conn: sqlite3.Connection, mint: str, days: int = 7) -> int | None:
-    row = conn.execute("SELECT name, symbol, created_at FROM tokens WHERE mint = ?", (mint,)).fetchone()
-    if row is None or row["created_at"] is None:
+    """Earlier tokens with the same name or symbol in the prior `days`. Uses
+    creation time when known, else graduation time (RPC backfill has no
+    creation time). The store holds graduated tokens only."""
+    row = conn.execute("SELECT name, symbol, coalesce(created_at, graduated_at) AS t FROM tokens WHERE mint = ?",
+                       (mint,)).fetchone()
+    if row is None or row["t"] is None or (row["name"] is None and row["symbol"] is None):
         return None
-    created = datetime.fromisoformat(row["created_at"])
-    start = (created - timedelta(days=days)).isoformat()
+    start = (datetime.fromisoformat(row["t"]) - timedelta(days=days)).isoformat()
     n = conn.execute(
         """SELECT COUNT(*) FROM tokens
-           WHERE mint != ? AND created_at >= ? AND created_at < ?
+           WHERE mint != ? AND coalesce(created_at, graduated_at) >= ? AND coalesce(created_at, graduated_at) < ?
              AND (lower(name) = lower(?) OR upper(symbol) = upper(?))""",
-        (mint, start, row["created_at"], row["name"], row["symbol"]),
+        (mint, start, row["t"], row["name"], row["symbol"]),
     ).fetchone()[0]
     return n
 

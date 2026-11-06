@@ -32,4 +32,6 @@ def seed_token(conn, mint, t0, closes_by_hour, creator="C", name=None, created_o
 
 @pytest.fixture
 def conn():
-    return db.connect(":memory:")
+    c = db.connect(":memory:")
+    db.set_state(c, "live_since", "2000-01-01T00:00:00+00:00")  # every test token counts as live
+    return c

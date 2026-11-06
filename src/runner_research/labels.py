@@ -18,8 +18,9 @@ LABELS = ("rug", "dead", "spike_and_fade", "slow_climb", "second_wave", "runner_
 class Candle:
     ts: datetime          # candle open time, UTC
     close: float
-    trades: int = 0
+    trades: int | None = None
     liquidity_usd: float | None = None
+    volume_usd: float | None = None
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,13 @@ class LabelResult:
     reason: str
 
 
+def grid_t0(t0: datetime, seconds: int = 300) -> datetime:
+    """Start of the 5m candle that contains T0. Candle windows are measured from
+    here so the graduation candle (which opens before T0) is included; this only
+    ever uses less post-T0 data, never more."""
+    return t0 - timedelta(seconds=t0.timestamp() % seconds)
+
+
 def _hours(t0: datetime, ts: datetime) -> float:
     return (ts - t0).total_seconds() / 3600
 
@@ -40,7 +48,10 @@ def label_path(
     grad_price: float,
     candles: Sequence[Candle],
     rules: LabelRules = DEFAULT_LABEL_RULES,
+    trades_h24: int | None = None,
 ) -> LabelResult:
+    """`trades_h24` (trades in hour 24–25, e.g. from the 25h snapshot) is used
+    when the candles carry no trade counts."""
     if grad_price <= 0:
         raise ValueError("graduation price must be positive")
     end = t0 + timedelta(hours=WINDOW_HOURS)
@@ -59,20 +70,38 @@ def label_path(
         return LabelResult(label, peak_mult, h_peak, c24_vs_peak, reason)
 
     # 1. Rug: liquidity drops below X% of its own max at some point after that max.
-    liq = [(c.ts, c.liquidity_usd) for c in path if c.liquidity_usd is not None]
+    liq = [c.liquidity_usd for c in path if c.liquidity_usd is not None]
     if liq:
         running_max = 0.0
-        for _, v in liq:
+        for v in liq:
             running_max = max(running_max, v)
             if running_max > 0 and v < rules.rug_liq_frac * running_max:
                 return res("rug", f"liquidity {v:.0f} < {rules.rug_liq_frac:.0%} of max {running_max:.0f}")
+    else:
+        # No liquidity series: PumpSwap pools are constant-product and the LP is
+        # burned at migration, so pool liquidity ~ sqrt(price). Liquidity below
+        # X% of its max  <=>  close below X^2 of the running max close.
+        frac = rules.rug_liq_frac ** 2
+        running_max = 0.0
+        for c in path:
+            running_max = max(running_max, c.close)
+            if c.close < frac * running_max:
+                return res("rug", f"close {c.close / running_max:.4%} of max (liquidity ~ sqrt(price) proxy)")
 
     # 2. Dead
     if peak_mult < rules.dead_peak_mult:
         return res("dead", f"peak {peak_mult:.2f}x < {rules.dead_peak_mult}x")
-    trades_h24 = sum(c.trades for c in path if 24 <= _hours(t0, c.ts) < 25)
-    if trades_h24 < rules.dead_min_trades_h24:
-        return res("dead", f"{trades_h24} trades in hour 24–25")
+    h24 = [c for c in path if 24 <= _hours(t0, c.ts) < 25]
+    counted = [c.trades for c in h24 if c.trades is not None]
+    if counted or (trades_h24 is None and any(c.trades is not None for c in path)):
+        trades_h24 = sum(counted)
+    if trades_h24 is not None:
+        if trades_h24 < rules.dead_min_trades_h24:
+            return res("dead", f"{trades_h24} trades in hour 24–25")
+    else:
+        vol = sum(c.volume_usd or 0.0 for c in h24)
+        if vol < rules.dead_min_volume_h24_usd:
+            return res("dead", f"${vol:.0f} volume in hour 24–25 (no trade counts)")
 
     # 3. Spike and fade
     if (

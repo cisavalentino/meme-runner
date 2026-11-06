@@ -8,23 +8,18 @@ from datetime import datetime, timedelta, timezone
 from .config import DEFAULT_LABEL_RULES, RULE_VERSION, WINDOW_HOURS, LabelRules
 from .db import upsert
 from .features import context_features, price_features
-from .labels import Candle, label_path
-
-FEATURES_DDL = """
-CREATE TABLE IF NOT EXISTS features_1h (
-    mint       TEXT PRIMARY KEY,
-    features   TEXT NOT NULL,   -- JSON, trade-level FR4 values from Dune or live trades
-    source     TEXT NOT NULL,
-    fetched_at TEXT NOT NULL
-);
-"""
-
+from .labels import Candle, grid_t0, label_path
 
 def load_candles(conn: sqlite3.Connection, pool: str) -> list[Candle]:
     rows = conn.execute(
-        "SELECT ts, open, close, trades, liquidity_usd FROM candles_5m WHERE pool = ? ORDER BY ts", (pool,))
-    return [Candle(datetime.fromisoformat(r["ts"]), r["close"], r["trades"] or 0, r["liquidity_usd"])
+        "SELECT ts, close, trades, liquidity_usd, volume_usd FROM candles_5m WHERE pool = ? ORDER BY ts", (pool,))
+    return [Candle(datetime.fromisoformat(r["ts"]), r["close"], r["trades"], r["liquidity_usd"], r["volume_usd"])
             for r in rows]
+
+
+def snapshot_trades_h24(conn: sqlite3.Connection, mint: str) -> int | None:
+    r = conn.execute("SELECT txns FROM snapshots WHERE mint = ? AND offset = '25h'", (mint,)).fetchone()
+    return r["txns"] if r else None
 
 
 def graduation_price(conn: sqlite3.Connection, pool: str) -> float | None:
@@ -34,21 +29,25 @@ def graduation_price(conn: sqlite3.Connection, pool: str) -> float | None:
 
 
 def label_tokens(conn: sqlite3.Connection, now: datetime | None = None,
-                 rules: LabelRules = DEFAULT_LABEL_RULES, rule_version: str = RULE_VERSION) -> int:
-    conn.executescript(FEATURES_DDL)
+                 rules: LabelRules = DEFAULT_LABEL_RULES, rule_version: str = RULE_VERSION,
+                 only_new: bool = False) -> int:
+    """`only_new` skips tokens already labeled under `rule_version`; inputs of a
+    labeled token (candles, T+1h features) do not change after its window closed."""
     now = now or datetime.now(timezone.utc)
     cutoff = (now - timedelta(hours=WINDOW_HOURS)).isoformat()
     toks = conn.execute(
         "SELECT mint, canonical_pool, graduated_at FROM tokens "
-        "WHERE canonical_pool IS NOT NULL AND graduated_at <= ? ORDER BY graduated_at", (cutoff,)).fetchall()
+        "WHERE canonical_pool IS NOT NULL AND graduated_at <= ? "
+        + ("AND mint NOT IN (SELECT mint FROM labels WHERE rule_version = ?) " if only_new else "")
+        + "ORDER BY graduated_at", (cutoff, rule_version) if only_new else (cutoff,)).fetchall()
     out = []
     for t in toks:
         p0 = graduation_price(conn, t["canonical_pool"])
         if p0 is None:
             continue
-        t0 = datetime.fromisoformat(t["graduated_at"])
+        t0 = grid_t0(datetime.fromisoformat(t["graduated_at"]))
         candles = load_candles(conn, t["canonical_pool"])
-        res = label_path(t0, p0, candles, rules)
+        res = label_path(t0, p0, candles, rules, trades_h24=snapshot_trades_h24(conn, t["mint"]))
         feats = {**price_features(t0, p0, candles), **context_features(conn, t["mint"])}
         tf = conn.execute("SELECT features FROM features_1h WHERE mint = ?", (t["mint"],)).fetchone()
         if tf:

@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS tokens (
     launchpad       TEXT NOT NULL DEFAULT 'pumpfun',
     canonical_pool  TEXT,
     bonding_minutes REAL,
+    bonding_curve   TEXT,
+    migrate_tx      TEXT,
     source          TEXT NOT NULL,
     fetched_at      TEXT NOT NULL
 );
@@ -41,6 +43,9 @@ CREATE TABLE IF NOT EXISTS pools (
     is_canonical INTEGER NOT NULL DEFAULT 0,
     fake_flag    INTEGER,
     fake_reason  TEXT,
+    liquidity_usd  REAL,
+    volume_24h_usd REAL,
+    txns_24h       INTEGER,
     source       TEXT NOT NULL,
     fetched_at   TEXT NOT NULL
 );
@@ -62,8 +67,10 @@ CREATE TABLE IF NOT EXISTS candles_5m (
 
 CREATE TABLE IF NOT EXISTS snapshots (
     mint         TEXT NOT NULL,
-    offset       TEXT NOT NULL CHECK (offset IN ('15m','1h','6h','24h','72h')),
-    price        REAL, liquidity REAL, mcap REAL, volume_usd REAL, txns INTEGER,
+    offset       TEXT NOT NULL CHECK (offset IN ('15m','1h','6h','24h','25h','72h')),
+    price        REAL, liquidity REAL, mcap REAL,
+    volume_usd   REAL,      -- DexScreener volume.h24
+    txns         INTEGER,   -- DexScreener txns.h1 (buys + sells in the last hour)
     holders      INTEGER, top10_pct REAL, dev_pct REAL,
     mint_auth    TEXT, freeze_auth TEXT,
     dexs_profile INTEGER, dexs_boosts INTEGER,
@@ -98,6 +105,41 @@ CREATE TABLE IF NOT EXISTS job_runs (
     updated_at TEXT NOT NULL,
     PRIMARY KEY (job, day)
 );
+
+-- Cursors for the RPC graduation scanner and other incremental jobs.
+CREATE TABLE IF NOT EXISTS state (
+    key        TEXT PRIMARY KEY,
+    value      TEXT,
+    updated_at TEXT NOT NULL
+);
+
+-- FR4 live path: first-hour trades polled from GeckoTerminal (last 300 per call).
+CREATE TABLE IF NOT EXISTS trades_1h (
+    id      TEXT PRIMARY KEY,
+    mint    TEXT NOT NULL,
+    ts      TEXT NOT NULL,
+    trader  TEXT,
+    side    TEXT NOT NULL,
+    usd     REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_trades_mint ON trades_1h(mint, ts);
+
+-- One row per trades poll, to tell whether the first hour is fully covered.
+CREATE TABLE IF NOT EXISTS trade_polls (
+    mint      TEXT NOT NULL,
+    polled_at TEXT NOT NULL,
+    n         INTEGER NOT NULL,
+    oldest    TEXT,
+    newest    TEXT,
+    PRIMARY KEY (mint, polled_at)
+);
+
+CREATE TABLE IF NOT EXISTS features_1h (
+    mint       TEXT PRIMARY KEY,
+    features   TEXT NOT NULL,   -- JSON, trade-level FR4 values
+    source     TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+);
 """
 
 
@@ -124,10 +166,22 @@ def connect(path: str | os.PathLike | None = None) -> sqlite3.Connection:
     path = path or os.environ.get("RR_DB_PATH", "data/runner.sqlite")
     if str(path) != ":memory:":
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, timeout=60)  # collector and backfill may write concurrently
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
     return conn
+
+
+def get_state(conn: sqlite3.Connection, key: str) -> str | None:
+    r = conn.execute("SELECT value FROM state WHERE key = ?", (key,)).fetchone()
+    return r[0] if r else None
+
+
+def set_state(conn: sqlite3.Connection, key: str, value: str | None) -> None:
+    conn.execute("INSERT INTO state (key, value, updated_at) VALUES (?, ?, ?) "
+                 "ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                 (key, value, now_iso()))
+    conn.commit()
 
 
 def upsert(conn: sqlite3.Connection, table: str, rows: list[dict], key: tuple[str, ...]) -> int:
@@ -135,7 +189,8 @@ def upsert(conn: sqlite3.Connection, table: str, rows: list[dict], key: tuple[st
     if not rows:
         return 0
     cols = list(rows[0].keys())
-    if "fetched_at" not in cols:
+    has_fetched = any(r[1] == "fetched_at" for r in conn.execute(f"PRAGMA table_info({table})"))
+    if has_fetched and "fetched_at" not in cols:
         cols.append("fetched_at")
     stamp = now_iso()
     placeholders = ", ".join(f":{c}" for c in cols)

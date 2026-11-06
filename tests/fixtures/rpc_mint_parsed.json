@@ -1,0 +1,49 @@
+{
+ "context": {
+  "apiVersion": "4.4.0",
+  "slot": 465589482
+ },
+ "value": [
+  {
+   "data": {
+    "parsed": {
+     "info": {
+      "decimals": 6,
+      "extensions": [
+       {
+        "extension": "metadataPointer",
+        "state": {
+         "authority": null,
+         "metadataAddress": "AgNyxjdT17R78aNCbooraENiJysDLNMZbZnPtRzpump"
+        }
+       },
+       {
+        "extension": "tokenMetadata",
+        "state": {
+         "additionalMetadata": [],
+         "mint": "AgNyxjdT17R78aNCbooraENiJysDLNMZbZnPtRzpump",
+         "name": "Stoa",
+         "symbol": "STOA",
+         "updateAuthority": null,
+         "uri": "https://ipfs.io/ipfs/bafkreibu2kptbjpszkuyyn3ci32x5rlm3bngma6udzltouua5qjajr4zke"
+        }
+       }
+      ],
+      "freezeAuthority": null,
+      "isInitialized": true,
+      "mintAuthority": null,
+      "supply": "931896478602283"
+     },
+     "type": "mint"
+    },
+    "program": "spl-token-2022",
+    "space": 406
+   },
+   "executable": false,
+   "lamports": 2712720,
+   "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+   "rentEpoch": 18446744073709551615,
+   "space": 406
+  }
+ ]
+}

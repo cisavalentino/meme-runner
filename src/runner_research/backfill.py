@@ -1,12 +1,13 @@
-"""FR1/FR2 backfill driver: one UTC day per Dune query, resumable via job_runs.
+"""FR1 backfill through Dune: one UTC day per query, resumable via job_runs.
 
-Requires DUNE_API_KEY in the environment and api.dune.com reachable.
+Needs a Dune plan that can run queries (a read-only/free account gets 402/403).
+The default FR1 path is the Solana RPC scanner in `ingest.py`.
 """
 from __future__ import annotations
 
 import os
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from importlib.resources import files
 
 from .db import norm_ts, now_iso, upsert
@@ -26,10 +27,14 @@ def load_sql(name: str, **params) -> str:
     return sql
 
 
-def pending_days(conn: sqlite3.Connection, job: str, start: date, end: date) -> list[date]:
+def pending_days(conn: sqlite3.Connection, job: str, start: date, end: date,
+                 today: date | None = None) -> list[date]:
+    """Days not yet done. Days that have not fully elapsed (UTC) are never
+    returned: a partial day marked 'done' would never be fetched again."""
+    today = today or datetime.now(timezone.utc).date()
     done = {r[0] for r in conn.execute(
         "SELECT day FROM job_runs WHERE job = ? AND status = 'done'", (job,))}
-    return [d for d in daterange(start, end) if d.isoformat() not in done]
+    return [d for d in daterange(start, min(end, today - timedelta(days=1))) if d.isoformat() not in done]
 
 
 def mark(conn, job: str, day: date, status: str, rows: int | None = None,
