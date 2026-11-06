@@ -145,6 +145,11 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status", help="store and backfill progress")
     lb = sub.add_parser("label", help="FR4+FR5: label tokens whose 72h window has closed")
     lb.add_argument("--all", action="store_true", help="relabel every token (default: only unlabeled)")
+    em = sub.add_parser("enrich-meta", help="metadata JSON (socials, description) for labeled tokens")
+    em.add_argument("--workers", type=int, default=8)
+    em.add_argument("--limit", type=int, default=None)
+    ins = sub.add_parser("insights", help="trader-facing insights.json for the web page")
+    ins.add_argument("--out", default="web/meme-research")
     wp = sub.add_parser("runners-page", help="write the runner list (data.json + index.html) for the web")
     wp.add_argument("--out", default="web/meme-research")
     h = sub.add_parser("health", help="exit 1 if the collector heartbeat is older than --max-age seconds")
@@ -262,6 +267,17 @@ def main(argv: list[str] | None = None) -> int:
             print(d.mint, d.offset, d.target_at.isoformat())
     elif a.cmd == "status":
         status(conn)
+    elif a.cmd == "enrich-meta":
+        from .meta import fetch_json, fetch_uris
+        _, rpc, _, _ = clients()
+        todo = [r[0] for r in conn.execute(
+            "SELECT l.mint FROM labels l LEFT JOIN token_meta m USING (mint) WHERE m.mint IS NULL")]
+        print(f"uris: {fetch_uris(conn, rpc, todo)}")
+        print(f"json: {fetch_json(conn, a.workers, a.limit)}")
+    elif a.cmd == "insights":
+        from .insights import write
+        write(conn, a.out, datetime.now(timezone.utc))
+        print(f"wrote {a.out}/insights.json")
     elif a.cmd == "runners-page":
         from .http import ApiClient
         from .webpage import write_page

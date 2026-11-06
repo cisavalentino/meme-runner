@@ -140,6 +140,20 @@ CREATE TABLE IF NOT EXISTS features_1h (
     source     TEXT NOT NULL,
     fetched_at TEXT NOT NULL
 );
+
+-- Off-chain metadata JSON from the mint's Token-2022 metadata uri (set at
+-- creation, so it is known at T0): socials and description.
+CREATE TABLE IF NOT EXISTS token_meta (
+    mint        TEXT PRIMARY KEY,
+    uri         TEXT,
+    status      TEXT,            -- ok | http_<code> | error | no_uri
+    description TEXT,
+    twitter     TEXT,
+    telegram    TEXT,
+    website     TEXT,
+    image       TEXT,
+    fetched_at  TEXT
+);
 """
 
 

@@ -32,7 +32,7 @@ def test_page_rows_and_notes(conn, tmp_path):
          "canonical_pool": "PD", "source": "t"}], key=("mint",))
     lab = lambda m, l, pk: {"mint": m, "rule_version": webpage.config.RULE_VERSION, "label": l, "peak_multiple": pk,
                             "hours_to_peak": 3.0, "close_24h_vs_peak": 0.5,
-                            "features": json.dumps({"grad_mcap": 35000.0}), "source": "t"}
+                            "features": json.dumps({"grad_mcap": 35000.0, "grad_price": 1e-5}), "source": "t"}
     db.upsert(conn, "labels", [lab("M", "runner_other", 9.0), lab("J", "slow_climb", 900.0), lab("D", "dead", 1.0)],
               key=("mint", "rule_version"))
     db.upsert(conn, "candles_5m", [
