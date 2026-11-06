@@ -145,6 +145,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status", help="store and backfill progress")
     lb = sub.add_parser("label", help="FR4+FR5: label tokens whose 72h window has closed")
     lb.add_argument("--all", action="store_true", help="relabel every token (default: only unlabeled)")
+    wp = sub.add_parser("runners-page", help="write the runner list (data.json + index.html) for the web")
+    wp.add_argument("--out", default="web/meme-research")
     h = sub.add_parser("health", help="exit 1 if the collector heartbeat is older than --max-age seconds")
     h.add_argument("--max-age", type=int, default=300)
 
@@ -260,6 +262,10 @@ def main(argv: list[str] | None = None) -> int:
             print(d.mint, d.offset, d.target_at.isoformat())
     elif a.cmd == "status":
         status(conn)
+    elif a.cmd == "runners-page":
+        from .http import ApiClient
+        from .webpage import write_page
+        print(f"wrote {write_page(conn, ApiClient(), a.out)} runners to {a.out}")
     elif a.cmd == "health":
         hb = db.get_state(conn, "collector_heartbeat")
         age = (datetime.now(timezone.utc) - datetime.fromisoformat(json.loads(hb)["at"])).total_seconds() if hb else None
