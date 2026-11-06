@@ -107,9 +107,10 @@ def scan_forward(conn: sqlite3.Connection, rpc: SolanaRpc, with_created_at: bool
 def candles_pending(conn: sqlite3.Connection, now: datetime, sample: float = 1.0,
                     historical_sample: float | None = None) -> list[sqlite3.Row]:
     """Tokens whose 72h window closed and that still need candles. Live tokens
-    (graduated after state `live_since`) come first, all of them; older tokens
-    follow oldest first, on a hash sample of `historical_sample` (default
-    config.CANDLE_SAMPLE_HISTORICAL; `sample` multiplies both)."""
+    (graduated after state `live_since`) come first, oldest first, all of them;
+    older tokens follow on a hash sample of `historical_sample` (default
+    config.CANDLE_SAMPLE_HISTORICAL; `sample` multiplies both), in hash order so
+    every partial backlog covers all months evenly."""
     from .config import CANDLE_SAMPLE_HISTORICAL
     hs = CANDLE_SAMPLE_HISTORICAL if historical_sample is None else historical_sample
     live_since = db.get_state(conn, "live_since")
@@ -124,6 +125,7 @@ def candles_pending(conn: sqlite3.Connection, now: datetime, sample: float = 1.0
     live = [r for r in rows if live_since and r["graduated_at"] >= live_since and sampled(r["mint"], sample)]
     hist = [r for r in rows if not (live_since and r["graduated_at"] >= live_since)
             and sampled(r["mint"], sample * hs)]
+    hist.sort(key=lambda r: hashlib.sha256(r["mint"].encode()).digest())
     return live + hist
 
 
