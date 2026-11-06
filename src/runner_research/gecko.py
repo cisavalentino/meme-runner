@@ -77,10 +77,17 @@ def parse_token_pools(js: dict) -> list[dict]:
             for d in js.get("data", [])]
 
 
+def demo_keys() -> list[str]:
+    """GECKOTERMINAL_API_KEY: one or more CoinGecko demo keys, comma-separated."""
+    return [k.strip() for k in os.environ.get("GECKOTERMINAL_API_KEY", "").split(",") if k.strip()]
+
+
 class Gecko:
-    def __init__(self, api: ApiClient, use_key: bool | None = None):
+    def __init__(self, api: ApiClient, use_key: bool | None = None, key: str | None = None):
         self.api = api
-        key = os.environ.get("GECKOTERMINAL_API_KEY")
+        if key:
+            use_key = True
+        key = key or next(iter(demo_keys()), None)
         use_key = os.environ.get("RR_GECKO_USE_KEY") == "1" if use_key is None else use_key
         self.base = DEMO if (use_key and key) else PUBLIC
         self.headers = {"x-cg-demo-api-key": key} if (use_key and key) else {}

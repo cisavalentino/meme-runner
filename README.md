@@ -38,8 +38,9 @@ from every log line. Helius cost: 1 credit per call; full backfill ≈ 1–1.5M 
 Candles are the slow part. Tokens graduated after `live_since` (collector start) all get
 candles, first; backfilled tokens get a 30% hash sample (`CANDLE_SAMPLE_HISTORICAL`), in hash
 order so a partial backlog covers every month evenly. Two lanes share a claim set: public GeckoTerminal (~5–6 calls/min from this IP, shared
-with trades and holders) and the CoinGecko demo key (25/min, stops at 9,500 calls/month,
-counted in `state`). Measured: ~1,600 candles/hour while the demo lane has quota, ~150–250/hour
+with trades and holders) and one lane per CoinGecko demo key in `GECKOTERMINAL_API_KEY`
+(comma-separated; 25/min each with its own limiter, stops at 9,500 calls/month per key, counted
+in `state`). Measured: ~1,600 candles/hour while the demo lane has quota, ~150–250/hour
 after.
 
 ## Data sources

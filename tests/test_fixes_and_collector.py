@@ -318,3 +318,15 @@ def test_bucket_ties_share_a_bucket():
     zero = [x for x in b if x["hi"] == 0]
     assert len(zero) == 1 and zero[0]["n"] == 70 and abs(zero[0]["rate"] - 0.1) < 1e-9
     assert sum(x["n"] for x in b) == 100
+
+
+def test_demo_keys_one_lane_each(monkeypatch):
+    from runner_research import cli, gecko
+    from runner_research.http import ApiClient
+    monkeypatch.setenv("GECKOTERMINAL_API_KEY", "CG-a, CG-b,,CG-c")
+    assert gecko.demo_keys() == ["CG-a", "CG-b", "CG-c"]
+    assert cli.demo_budget_keys() == ["cg_demo_calls", "cg_demo_calls_2", "cg_demo_calls_3"]
+    g = gecko.Gecko(ApiClient(), key="CG-b")
+    assert g.base == gecko.DEMO and g.headers == {"x-cg-demo-api-key": "CG-b"}
+    monkeypatch.setenv("RR_GECKO_USE_KEY", "0")
+    assert gecko.Gecko(ApiClient()).base == gecko.PUBLIC
