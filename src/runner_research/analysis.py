@@ -79,16 +79,23 @@ def bucket_rates(rows: Sequence[Row], feature: str, n_buckets: int = 5) -> dict:
     Rows missing the feature form their own bucket (missingness can be a signal)."""
     base_k = sum(is_positive(r.label) for r in rows)
     base = base_k / len(rows) if rows else math.nan
-    have = sorted((r.features[feature], is_positive(r.label)) for r in rows
-                  if r.features.get(feature) is not None)
+    have = sorted(((r.features[feature], is_positive(r.label)) for r in rows
+                   if r.features.get(feature) is not None), key=lambda t: t[0])
     missing = [is_positive(r.label) for r in rows if r.features.get(feature) is None]
     buckets = []
     if have:
-        size = len(have) / n_buckets
-        for i in range(n_buckets):
-            part = have[round(i * size):round((i + 1) * size)]
-            if not part:
-                continue
+        # Cut at quantiles, but never inside a run of equal values: ties must
+        # share a bucket, or the order within the tie decides the rates.
+        size, cuts, start = len(have) / n_buckets, [], 0
+        for i in range(1, n_buckets + 1):
+            end = max(round(i * size), start)
+            while 0 < end < len(have) and have[end][0] == have[end - 1][0]:
+                end += 1
+            if end > start:
+                cuts.append((start, end))
+                start = end
+        for s, e in cuts:
+            part = have[s:e]
             k, n = sum(p for _, p in part), len(part)
             lo, hi = wilson(k, n)
             buckets.append({"lo": part[0][0], "hi": part[-1][0], "n": n, "rate": k / n,
@@ -155,12 +162,15 @@ def _matrix(rows: Sequence[Row], names: list[str]):
 
 def out_of_time_model(rows: Sequence[Row], split: datetime, feature_names: list[str] | None = None) -> dict:
     """Train on graduations before `split`, test on those after. Logistic
-    regression with median imputation and missing-value indicators."""
+    regression with median imputation and missing-value indicators. Features
+    are heavy-tailed (multiples up to 1e4, mcap up to 1e9), so they are mapped
+    to normal scores by rank (QuantileTransformer); StandardScaler left the
+    model at chance level."""
     from sklearn.impute import SimpleImputer
     from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import average_precision_score, roc_auc_score
     from sklearn.pipeline import make_pipeline
-    from sklearn.preprocessing import StandardScaler
+    from sklearn.preprocessing import QuantileTransformer
 
     train = [r for r in rows if r.graduated_at < split]
     test = [r for r in rows if r.graduated_at >= split]
@@ -169,7 +179,8 @@ def out_of_time_model(rows: Sequence[Row], split: datetime, feature_names: list[
     Xtr, ytr = _matrix(train, names)
     Xte, yte = _matrix(test, names)
     model = make_pipeline(SimpleImputer(strategy="median", add_indicator=True, keep_empty_features=True),
-                          StandardScaler(), LogisticRegression(max_iter=2000, class_weight="balanced"))
+                          QuantileTransformer(output_distribution="normal", n_quantiles=200),
+                          LogisticRegression(max_iter=3000, class_weight="balanced"))
     out = {"model": "logreg", "split": split.isoformat(), "features": names,
            "train_n": len(train), "train_pos": int(ytr.sum()), "test_n": len(test), "test_pos": int(yte.sum())}
     if len(set(ytr)) < 2:

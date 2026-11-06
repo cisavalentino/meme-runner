@@ -286,7 +286,7 @@ def test_gecko_404_is_empty_and_other_errors_retry_hourly(conn):
     assert len(ingest.candles_pending(conn, wall + timedelta(hours=2))) == 1
 
 
-def test_candles_live_first_then_sampled_history_oldest_first(conn):
+def test_candles_live_first_then_sampled_history_in_hash_order(conn):
     db.set_state(conn, "live_since", (T0 + timedelta(days=1)).isoformat())
     rows = [{"mint": f"H{i:03d}", "graduated_at": (T0 - timedelta(minutes=i)).isoformat(), "canonical_pool": f"PH{i}",
              "source": "t"} for i in range(300)]
@@ -296,7 +296,7 @@ def test_candles_live_first_then_sampled_history_oldest_first(conn):
     p = ingest.candles_pending(conn, T0 + timedelta(days=5), historical_sample=0.3)
     assert [r["mint"] for r in p[:5]] == [f"L{i}" for i in range(5)]          # all live, first
     hist = [r["graduated_at"] for r in p[5:]]
-    assert hist == sorted(hist) and 60 < len(hist) < 120                       # ~30%, oldest first
+    assert hist != sorted(hist) and 60 < len(hist) < 120                       # ~30%, spread over time
 
 
 def test_claim_prevents_double_fetch(conn):
@@ -306,3 +306,27 @@ def test_claim_prevents_double_fetch(conn):
     taken = {"M0", "M1"}
     n = ingest.fetch_candles(conn, FakeGecko(), T0 + timedelta(days=4), claim=lambda m: m not in taken)
     assert n == 2 and len(ingest.candles_pending(conn, T0 + timedelta(days=4))) == 2
+
+
+def test_bucket_ties_share_a_bucket():
+    from datetime import datetime, timezone
+    from runner_research import analysis
+    t = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    rows = [analysis.Row(f"m{i}", t, "slow_climb" if i % 10 == 0 else "dead", {"x": 0 if i < 70 else i})
+            for i in range(100)]
+    b = analysis.bucket_rates(rows, "x")["buckets"]
+    zero = [x for x in b if x["hi"] == 0]
+    assert len(zero) == 1 and zero[0]["n"] == 70 and abs(zero[0]["rate"] - 0.1) < 1e-9
+    assert sum(x["n"] for x in b) == 100
+
+
+def test_demo_keys_one_lane_each(monkeypatch):
+    from runner_research import cli, gecko
+    from runner_research.http import ApiClient
+    monkeypatch.setenv("GECKOTERMINAL_API_KEY", "CG-a, CG-b,,CG-c")
+    assert gecko.demo_keys() == ["CG-a", "CG-b", "CG-c"]
+    assert cli.demo_budget_keys() == ["cg_demo_calls", "cg_demo_calls_2", "cg_demo_calls_3"]
+    g = gecko.Gecko(ApiClient(), key="CG-b")
+    assert g.base == gecko.DEMO and g.headers == {"x-cg-demo-api-key": "CG-b"}
+    monkeypatch.setenv("RR_GECKO_USE_KEY", "0")
+    assert gecko.Gecko(ApiClient()).base == gecko.PUBLIC

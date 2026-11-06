@@ -40,6 +40,12 @@ def rpc_urls() -> list[str]:
     return [u for _ in range(workers) for u in urls]
 
 
+def demo_budget_keys() -> list[str]:
+    """state keys for the monthly call count of each demo key (first keeps the old name)."""
+    from .gecko import demo_keys
+    return ["cg_demo_calls" if i == 0 else f"cg_demo_calls_{i + 1}" for i in range(len(demo_keys()))]
+
+
 def private_rpc() -> bool:
     return bool(os.environ.get("RR_SOLANA_RPC", "").strip())
 
@@ -89,7 +95,8 @@ def status(conn) -> None:
         "candles_pending_sampled": len(__import__("runner_research.ingest", fromlist=["x"]).candles_pending(
             conn, datetime.now(timezone.utc))),
         "live_since": db.get_state(conn, "live_since"),
-        "cg_demo_calls_this_month": db.get_state(conn, f"cg_demo_calls:{datetime.now(timezone.utc):%Y-%m}"),
+        "cg_demo_calls_this_month": {k: int(db.get_state(conn, f"{k}:{datetime.now(timezone.utc):%Y-%m}") or 0)
+                                     for k in demo_budget_keys()},
         "candles_done": q("SELECT COUNT(*) FROM job_runs WHERE job='fr2' AND status='done'"),
         "candles_empty": q("SELECT COUNT(*) FROM job_runs WHERE job='fr2' AND status='done' AND rows=0"),
         "candles_failed": q("SELECT COUNT(*) FROM job_runs WHERE job='fr2' AND status='failed'"),
@@ -218,9 +225,13 @@ def main(argv: list[str] | None = None) -> int:
                     time.sleep(30)
 
         threading.Thread(target=candle_worker, args=(gecko, None), name="candles", daemon=True).start()
-        if os.environ.get("GECKOTERMINAL_API_KEY"):
-            threading.Thread(target=candle_worker, args=(Gecko(gecko.api, use_key=True), "cg_demo_calls"),
-                             name="candles-cg", daemon=True).start()
+        # One lane per CoinGecko demo key, each with its own client so the
+        # per-key 30/min limit is not shared through the per-host bucket.
+        from .gecko import demo_keys
+        from .http import ApiClient
+        for key, budget in zip(demo_keys(), demo_budget_keys()):
+            threading.Thread(target=candle_worker, args=(Gecko(ApiClient(), key=key), budget),
+                             name=f"candles-{budget}", daemon=True).start()
         while True:
             now = datetime.now(timezone.utc)
             from .http import redact_url
