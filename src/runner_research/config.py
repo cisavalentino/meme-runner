@@ -55,6 +55,14 @@ Q1_MIN_MULT_1H = 4.0
 Q1_MIN_FRAC_OF_PEAK_24H = 0.5    # peak measured over 0–24h only (as known at 24h)
 POSITIVE_LABELS = ("slow_climb", "runner_other")
 
+# Segments (analysis). "hollow": first PumpSwap price implies < $1k market cap,
+# ~1000x below a normal graduation (~$35k); there is a clear gap between $1k
+# and $10k. "instant": created and graduated in the same second (bundle).
+HOLLOW_MCAP_USD = 1000.0
+# Features known at T0 (no price path after graduation).
+PRICE_PATH_FEATURES = ("mult_15m", "mult_1h")
+GRAD_PRICE_FEATURES = ("grad_price", "grad_mcap")
+
 # Live collector / call budget. GeckoTerminal public API is ~10–30 calls/min with
 # no monthly cap; per-token trade polling is the expensive part, so it runs on a
 # deterministic hash sample of mints (unbiased; missing features stay missing).

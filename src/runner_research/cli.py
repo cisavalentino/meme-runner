@@ -75,8 +75,13 @@ def run_analysis(conn, split: date, out: str) -> None:
                  "run_at": datetime.now(timezone.utc).isoformat(timespec="seconds")},
         "first_question": analysis.first_question(conn),
         "base_rates_by_week": analysis.base_rates_by_week(rows),
+        "segments": analysis.segment_summary(rows),
         "buckets": [analysis.bucket_rates(rows, f) for f in numeric],
+        # core = without hollow graduations (no positives, would dominate low buckets)
+        "buckets_core": [analysis.bucket_rates([r for r in rows if analysis.segment(r) != "hollow"], f)
+                         for f in numeric],
         "model": analysis.out_of_time_model(rows, split_dt, numeric),
+        "model_variants": analysis.model_variants(rows, split_dt, numeric),
     }
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     Path(out).write_text(json.dumps(report, indent=2, default=str))

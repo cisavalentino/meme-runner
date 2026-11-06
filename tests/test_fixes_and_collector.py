@@ -330,3 +330,27 @@ def test_demo_keys_one_lane_each(monkeypatch):
     assert g.base == gecko.DEMO and g.headers == {"x-cg-demo-api-key": "CG-b"}
     monkeypatch.setenv("RR_GECKO_USE_KEY", "0")
     assert gecko.Gecko(ApiClient()).base == gecko.PUBLIC
+
+
+def test_segments_and_model_variants():
+    import random
+    from datetime import datetime, timezone
+    from runner_research import analysis
+    rnd = random.Random(1)
+    rows = []
+    for i in range(400):
+        t = datetime(2026, 8 if i < 250 else 10, 1 + i % 28, tzinfo=timezone.utc)
+        kind = i % 3
+        f = {"grad_mcap": 50.0 if kind == 0 else 35000.0, "bonding_minutes": 0 if kind == 1 else 30.0,
+             "mult_1h": rnd.random() * 3, "hour_utc": i % 24}
+        pos = kind != 0 and f["mult_1h"] > 2.4
+        rows.append(analysis.Row(f"m{i}", t, "slow_climb" if pos else "dead", f))
+    seg = analysis.segment_summary(rows)
+    assert set(seg) == {"normal", "instant", "hollow"} and seg["hollow"]["positive"] == 0
+    assert abs(sum(s["share"] for s in seg.values()) - 1) < 1e-9
+    v = analysis.model_variants(rows, datetime(2026, 9, 1, tzinfo=timezone.utc),
+                                ["bonding_minutes", "grad_mcap", "hour_utc", "mult_1h"])
+    assert v["core_path_only"]["features"] == ["mult_15m", "mult_1h"]
+    assert "mult_1h" not in v["core_t0_features"]["features"]
+    assert v["core_all_features"]["train_n"] < v["all_rows_all_features"]["train_n"]
+    assert v["core_path_only"]["test_auc"] > 0.9
