@@ -31,6 +31,8 @@ pm2 ls; pm2 logs rr-collect; .venv/bin/rr status; .venv/bin/rr health
 | `rr-collect` | discovery (15 s), snapshots, holders, trade polling, candle backlog in the rest of each loop | always, auto-restart |
 | `rr-backfill` | RPC graduations back to 2026-08-01, resumable | until done (exit 0 = stays stopped) |
 | `rr-daily` | `rr label` (new windows only) + `rr analyze` → `reports/analysis.json` | 00:20 UTC |
+| `rr-runners` | `rr runners-page`: runner list + live DexScreener snapshot → `web/meme-research/` | every 15 min |
+| `rr-web` | static server for `web/` on 127.0.0.1:8795 (Caddy proxies `/meme-research/*`) | always |
 | `rr-watchdog` | restarts `rr-collect` if its heartbeat is > 10 min old | every 10 min |
 
 `.env`: `RR_SOLANA_RPC` (Helius URL; 6 parallel workers, `RR_RPC_WORKERS`), keys are redacted

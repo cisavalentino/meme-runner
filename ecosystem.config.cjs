@@ -24,4 +24,10 @@ module.exports = { apps: [
   { name: 'rr-watchdog', cwd: __dirname, script: 'bash', interpreter: 'none', time: true,
     args: ['-c', '.venv/bin/rr health --max-age 600 || pm2 restart rr-collect'],
     autorestart: false, cron_restart: '*/10 * * * *' },
+
+  // Runner list web page (/meme-research/): static files from web/, refreshed every 15 min.
+  // Caddy proxies /meme-research/* on the public domain to this port.
+  { name: 'rr-web', cwd: __dirname, script: '.venv/bin/python', interpreter: 'none', time: true,
+    args: ['-m', 'http.server', '8795', '--bind', '127.0.0.1', '--directory', 'web'], autorestart: true },
+  rr('rr-runners', 'runners-page --out web/meme-research', { autorestart: false, cron_restart: '*/15 * * * *' }),
 ] };
