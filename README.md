@@ -106,4 +106,8 @@ frontend API (behind Cloudflare).
   *graduations* (`creator_prior_graduated`); rugs/runners count only once their 72h window closed by this token's T0+1h.
 - **Same-name copies:** earlier tokens with the same name/symbol within 7 days, by creation time
   when known, else graduation time.
+- **Segments** (`analysis.segment`): *hollow* = first PumpSwap price implies < $1k market cap
+  (`HOLLOW_MCAP_USD`; ~27% of graduations, 1 positive in 7k), *instant* = created and graduated in
+  the same second (~38%, half rug), *normal* = the rest. `buckets_core` and the `core_*` model
+  variants exclude hollow; `core_t0_features` drops the first-hour price path.
 - **Positive class for the model:** `slow_climb` or `runner_other` (PRD: "slow climb or runner").

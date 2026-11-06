@@ -70,6 +70,46 @@ def base_rates_by_week(rows: Sequence[Row]) -> dict:
     return out
 
 
+def segment(r: Row) -> str:
+    m = r.features.get("grad_mcap")
+    if m is not None and m < config.HOLLOW_MCAP_USD:
+        return "hollow"
+    if r.features.get("bonding_minutes") == 0:
+        return "instant"
+    return "normal"
+
+
+def segment_summary(rows: Sequence[Row]) -> dict:
+    by = defaultdict(list)
+    for r in rows:
+        by[segment(r)].append(r)
+    out = {}
+    for seg in ("normal", "instant", "hollow"):
+        rs = by.get(seg, [])
+        if not rs:
+            continue
+        n, k = len(rs), sum(is_positive(r.label) for r in rs)
+        c = Counter(r.label for r in rs)
+        out[seg] = {"n": n, "share": n / len(rows), "positive": k, "positive_rate": k / n,
+                    "ci95": list(wilson(k, n)), "labels": {l: c[l] / n for l in LABELS}}
+    return out
+
+
+def model_variants(rows: Sequence[Row], split: datetime, numeric: list[str]) -> dict:
+    """Same OOT model on feature subsets: does anything beyond the first-hour
+    price path carry signal?"""
+    core = [r for r in rows if segment(r) != "hollow"]
+    no_path = [f for f in numeric if f not in config.PRICE_PATH_FEATURES]
+    no_price = [f for f in no_path if f not in config.GRAD_PRICE_FEATURES]
+    return {
+        "all_rows_all_features": out_of_time_model(rows, split, numeric),
+        "core_all_features": out_of_time_model(core, split, numeric),
+        "core_t0_features": out_of_time_model(core, split, no_path),
+        "core_no_price_features": out_of_time_model(core, split, no_price),
+        "core_path_only": out_of_time_model(core, split, list(config.PRICE_PATH_FEATURES)),
+    }
+
+
 def is_positive(label: str) -> bool:
     return label in config.POSITIVE_LABELS
 
