@@ -358,21 +358,9 @@ def open_prices(conn: sqlite3.Connection, api) -> dict[str, float]:
 
 
 def backfill_reserves(conn: sqlite3.Connection, rpc, since: datetime) -> int:
-    """Pool reserves for recent graduations stored before reserves were parsed."""
-    from .solana import parse_migration
-    todo = conn.execute(
-        """SELECT t.migrate_tx FROM tokens t JOIN pools p ON p.pool = t.canonical_pool
-           WHERE t.graduated_at >= ? AND p.pool_base IS NULL AND t.migrate_tx IS NOT NULL""",
-        (_iso(since),)).fetchall()
-    sigs = [r[0] for r in todo]
-    n = 0
-    for i in range(0, len(sigs), 50):
-        chunk = sigs[i:i + 50]
-        for sig, tx in zip(chunk, rpc.transactions(chunk)):
-            m = parse_migration(tx, sig) if tx else None
-            if m and m.pool_base:
-                conn.execute("UPDATE pools SET quote_mint = ?, pool_base = ?, pool_quote = ? WHERE pool = ?",
-                             (m.quote_mint, m.pool_base, m.pool_quote, m.pool))
-                n += 1
-        conn.commit()
-    return n
+    """Pool reserves (and the right pool) for recent graduations stored without them."""
+    from .ingest import repair_pools
+    mints = [r[0] for r in conn.execute(
+        """SELECT t.mint FROM tokens t LEFT JOIN pools p ON p.pool = t.canonical_pool
+           WHERE t.graduated_at >= ? AND p.pool_base IS NULL AND t.migrate_tx IS NOT NULL""", (_iso(since),))]
+    return repair_pools(conn, rpc, mints)["reserves"] if mints else 0

@@ -183,3 +183,36 @@ def fetch_candles(conn: sqlite3.Connection, gecko: Gecko, now: datetime | None =
                                       "updated_at": db.now_iso()}], key=("job", "day"))
         done += 1
     return done
+
+
+def repair_pools(conn: sqlite3.Connection, rpc: SolanaRpc, mints: list[str], chunk: int = 50) -> dict:
+    """Re-read migration txs: store pool reserves, and fix the canonical pool
+    where the old parser took the wrong MigrateV2 account. A fixed token loses
+    its empty candle result so the backlog fetches it again."""
+    from .solana import parse_migration
+    out = {"checked": 0, "fixed_pool": 0, "reserves": 0}
+    todo = conn.execute(f"SELECT mint, migrate_tx, canonical_pool FROM tokens WHERE mint IN "
+                        f"(SELECT value FROM json_each(?)) AND migrate_tx IS NOT NULL",
+                        (__import__("json").dumps(mints),)).fetchall()
+    for i in range(0, len(todo), chunk):
+        part = todo[i:i + chunk]
+        for r, tx in zip(part, rpc.transactions([p["migrate_tx"] for p in part])):
+            m = parse_migration(tx, r["migrate_tx"]) if tx else None
+            out["checked"] += 1
+            if not m:
+                continue
+            if m.pool != r["canonical_pool"]:
+                conn.execute("UPDATE tokens SET canonical_pool = ? WHERE mint = ?", (m.pool, m.mint))
+                conn.execute("UPDATE pools SET is_canonical = 0 WHERE pool = ?", (r["canonical_pool"],))
+                conn.execute("DELETE FROM job_runs WHERE job = 'fr2' AND day = ?", (m.mint,))
+                out["fixed_pool"] += 1
+            db.upsert(conn, "pools", [{"pool": m.pool, "mint": m.mint, "dex": "pumpswap",
+                                       "quote_mint": m.quote_mint or "So11111111111111111111111111111111111111112",
+                                       "pool_base": m.pool_base, "pool_quote": m.pool_quote,
+                                       "created_at": m.graduated_at.isoformat(timespec="seconds"),
+                                       "is_canonical": 1, "source": "rpc"}], key=("pool",))
+            out["reserves"] += m.pool_base is not None
+        conn.commit()
+        if (i // chunk) % 20 == 0:
+            log.info("repair-pools %d/%d %s", i + len(part), len(todo), out)
+    return out

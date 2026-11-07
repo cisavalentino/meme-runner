@@ -49,6 +49,20 @@ class Migration:
     pool_quote: float | None = None     # is pool_quote / pool_base (in quote units)
 
 
+def pool_owner(tx: dict, mint: str, bonding_curve: str) -> str | None:
+    """The PumpSwap pool is the owner of the vault that received the token
+    supply. MigrateV2's account list does not always have it at _IX_POOL
+    (about 1 in 12 graduations), so the balances decide."""
+    best, amt = None, 0.0
+    for b in (tx.get("meta") or {}).get("postTokenBalances") or []:
+        if b.get("mint") != mint or b.get("owner") in (None, bonding_curve):
+            continue
+        a = float((b.get("uiTokenAmount") or {}).get("uiAmountString") or 0)
+        if a > amt:
+            best, amt = b["owner"], a
+    return best
+
+
 def pool_reserves(tx: dict, pool: str, mint: str) -> tuple[str | None, float | None, float | None]:
     """(quote mint, base amount, quote amount) held by the pool after the tx."""
     base = quote = qmint = None
@@ -78,10 +92,11 @@ def parse_migration(tx: dict, signature: str | None = None) -> Migration | None:
     for ix in tx["transaction"]["message"]["instructions"]:
         acc = ix.get("accounts") or []
         if ix.get("programId") == PUMP_PROGRAM and len(acc) > _IX_POOL and PUMPSWAP_PROGRAM in acc:
-            qmint, base, quote = pool_reserves(tx, acc[_IX_POOL], acc[_IX_MINT])
+            pool = pool_owner(tx, acc[_IX_MINT], acc[_IX_BONDING_CURVE]) or acc[_IX_POOL]
+            qmint, base, quote = pool_reserves(tx, pool, acc[_IX_MINT])
             return Migration(
                 signature=signature or tx["transaction"]["signatures"][0],
-                mint=acc[_IX_MINT], pool=acc[_IX_POOL], bonding_curve=acc[_IX_BONDING_CURVE],
+                mint=acc[_IX_MINT], pool=pool, bonding_curve=acc[_IX_BONDING_CURVE],
                 graduated_at=datetime.fromtimestamp(tx["blockTime"], timezone.utc),
                 quote_mint=qmint, pool_base=base, pool_quote=quote)
     return None

@@ -156,6 +156,8 @@ def main(argv: list[str] | None = None) -> int:
     lt.add_argument("--once", action="store_true")
     lt.add_argument("--every", type=int, default=30, help="seconds between steps")
     lt.add_argument("--out", default="web/meme-research")
+    rp = sub.add_parser("repair-pools", help="re-read migration txs: fix wrong canonical pools, store reserves")
+    rp.add_argument("--recent-days", type=float, default=4, help="also every token of the last N days")
     sub.add_parser("telegram-chats", help="chats that messaged the bot (to find TELEGRAM_CHAT_ID)")
     tt = sub.add_parser("telegram-test", help="send a sample signal alert for a mint (or print it with --dry)")
     tt.add_argument("mint")
@@ -326,6 +328,17 @@ def main(argv: list[str] | None = None) -> int:
                 if a.once:
                     break
                 time.sleep(max(1.0, a.every - (datetime.now(timezone.utc) - now).total_seconds()))
+    elif a.cmd == "repair-pools":
+        from .ingest import repair_pools
+        _, rpc, _, _ = clients()
+        since = (datetime.now(timezone.utc) - timedelta(days=a.recent_days)).isoformat(timespec="seconds")
+        mints = [r[0] for r in conn.execute(
+            """SELECT t.mint FROM tokens t LEFT JOIN pools p ON p.pool = t.canonical_pool
+               WHERE p.pool_base IS NULL AND (t.graduated_at >= ? OR EXISTS (
+                   SELECT 1 FROM job_runs j WHERE j.job = 'fr2' AND j.day = t.mint AND j.status = 'done'
+                   AND NOT EXISTS (SELECT 1 FROM candles_5m c WHERE c.pool = t.canonical_pool)))""", (since,))]
+        print(f"{len(mints)} tokens to check", flush=True)
+        print(json.dumps(repair_pools(conn, rpc, mints)))
     elif a.cmd in ("telegram-chats", "telegram-test"):
         import httpx
         from . import livetest, telegram

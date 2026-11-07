@@ -111,3 +111,13 @@ def test_api_key_is_redacted_from_logs_and_errors(caplog):
     rec = logging.LogRecord("t", logging.WARNING, __file__, 1, "POST %s -> 429", (url,), None)
     RedactFilter().filter(rec)
     assert "abc-123" not in rec.getMessage()
+
+
+def test_pool_comes_from_the_vault_owner():
+    tx = load("rpc_migrate_tx.json")
+    real = "RealPool1111111111111111111111111111111111"
+    for b in tx["meta"]["postTokenBalances"]:
+        if b.get("owner") == POOL:
+            b["owner"] = real                      # MigrateV2 account list points elsewhere
+    m = solana.parse_migration(tx)
+    assert m.pool == real and m.pool_base == 206_900_000
