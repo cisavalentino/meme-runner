@@ -81,6 +81,15 @@ def signal_message(r: dict, f: dict, pair: dict | None, info: dict | None, creat
                      else f"👥 {i.get('holders') or '–'}")
         lines.append(f"🔐 Mint {'❌' if i.get('mint_auth') else '✅'} · Freeze {'❌' if i.get('freeze_auth') else '✅'}"
                      + (f" · Dev {i['dev_pct']:.1f}%" if i.get("dev_pct") is not None else ""))
+    extra = []
+    if f.get("sniper") is not None:
+        extra.append(f"🎯 Sniper {f['sniper'] * 100:.0f}% (porsi volume beli jam 1 di 2 mnt pertama)")
+    if f.get("creator_sold") is not None:
+        extra.append("👤 Creator " + ("SUDAH jual" if f["creator_sold"] else "belum jual"))
+    if f.get("dex_paid") is not None:
+        extra.append("💰 Dex paid " + ("✅" if f["dex_paid"] else "–") + (f" · boost {f['boosts']}" if f.get("boosts") else ""))
+    if extra:
+        lines.append(" · ".join(extra))
     jump = f.get("max_jump_1h")
     lines.append(f"🕯 Lonjakan 1 candle maks {mx(jump)}" + (f" · ⏳ Bonding {bond * 60:.0f} dtk" if bond is not None and bond < 1
                                                       else f" · ⏳ Bonding {bond:.0f} mnt" if bond else ""))
@@ -156,16 +165,22 @@ def send_alerts(conn: sqlite3.Connection, tg: Telegram, api, gecko, client: http
     pairs = fetch_pairs(api, [r["mint"] for r in rows]) if rows else {}
     for r in rows:
         f = json.loads(r["features"] or "{}")
+        d = livetest.detail(conn, r["mint"])
         info = None
-        if gecko is not None:
+        if d["holders"] is not None:                      # 1h snapshot already has them
+            snap = conn.execute("SELECT mint_auth, freeze_auth FROM snapshots WHERE mint = ? AND offset = '1h'",
+                                (r["mint"],)).fetchone()
+            info = {"holders": d["holders"], "top10_pct": d["top10"], "dev_pct": d["dev"],
+                    "mint_auth": snap["mint_auth"], "freeze_auth": snap["freeze_auth"]}
+        elif gecko is not None:
             try:
                 info = gecko.token_info(r["mint"])
             except Exception as ex:
                 log.warning("token_info %s: %s", r["mint"], ex)
         grads = conn.execute("SELECT COUNT(*) FROM tokens WHERE creator = ? AND graduated_at < ?",
                              (r["creator"], r["graduated_at"])).fetchone()[0] if r["creator"] else None
-        text = signal_message(dict(r), f, pairs.get(r["mint"]), info, grads, json.loads(r["warnings"] or "[]"),
-                              now, rule)
+        text = signal_message(dict(r), {**f, **{k: d[k] for k in ("dex_paid", "boosts", "sniper", "creator_sold")}},
+                              pairs.get(r["mint"]), info, grads, json.loads(r["warnings"] or "[]"), now, rule)
         _mark(conn, r["mint"], "signal", tg.send(text, fetch_image(client, r["image"])))
         out["signal"] += 1
     for r in conn.execute(

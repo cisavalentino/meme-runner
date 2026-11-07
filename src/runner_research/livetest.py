@@ -264,6 +264,73 @@ def score(conn: sqlite3.Connection, now: datetime) -> int:
     return n
 
 
+# ---------------------------------------------------------------- holder metrics
+
+def detail(conn: sqlite3.Connection, mint: str) -> dict:
+    """1h holder snapshot (GeckoTerminal), DexScreener paid profile and
+    first-hour trade features of one token; missing values stay None."""
+    s = conn.execute("SELECT holders, top10_pct, dev_pct, dexs_profile, dexs_boosts FROM snapshots "
+                     "WHERE mint = ? AND offset = '1h'", (mint,)).fetchone()
+    f = conn.execute("SELECT features FROM features_1h WHERE mint = ?", (mint,)).fetchone()
+    tf = json.loads(f[0]) if f else {}
+    ok = tf.get("trades_complete")
+    return {"holders": s["holders"] if s else None,
+            "top10": s["top10_pct"] if s and s["top10_pct"] is not None and s["top10_pct"] <= 100 else None,
+            "dev": s["dev_pct"] if s else None,
+            "dex_paid": bool(s["dexs_profile"]) if s and s["dexs_profile"] is not None else None,
+            "boosts": s["dexs_boosts"] if s else None,
+            "sniper": tf.get("sniper_share") if ok else None,
+            "creator_sold": (tf.get("creator_sell_usd_1h") or 0) > 0 if ok else None,
+            "traders_1h": tf.get("traders_1h") if ok else None}
+
+
+METRICS = [
+    # key, title, buckets as (label, test)
+    ("top10", "Top 10 holder (jam 1)", [("< 30%", lambda v: v < 30), ("30–50%", lambda v: 30 <= v < 50),
+                                        ("50–70%", lambda v: 50 <= v < 70), ("≥ 70%", lambda v: v >= 70)]),
+    ("dev", "Dev holding (jam 1)", [("0%", lambda v: v == 0), ("0–5%", lambda v: 0 < v < 5),
+                                     ("5–20%", lambda v: 5 <= v < 20), ("≥ 20%", lambda v: v >= 20)]),
+    ("holders", "Jumlah holder (jam 1)", [("< 100", lambda v: v < 100), ("100–300", lambda v: 100 <= v < 300),
+                                           ("300–1.000", lambda v: 300 <= v < 1000), ("≥ 1.000", lambda v: v >= 1000)]),
+    ("sniper", "Sniper: porsi volume beli jam 1 di 2 menit pertama", [("< 10%", lambda v: v < .1), ("10–25%", lambda v: .1 <= v < .25),
+                                                        ("25–50%", lambda v: .25 <= v < .5), ("≥ 50%", lambda v: v >= .5)]),
+    ("dex_paid", "Dex paid (profil DexScreener)", [("ya", lambda v: v is True), ("tidak", lambda v: v is False)]),
+    ("creator_sold", "Creator menjual di jam 1", [("ya", lambda v: v is True), ("tidak", lambda v: v is False)]),
+]
+MIN_N = 30          # a bucket below this is shown as "belum cukup"
+
+
+def holder_metrics(conn: sqlite3.Connection) -> dict:
+    """Runner / rug rate by holder metric, for labeled graduations that have
+    the 1h holder snapshot (collected for every graduation since Nov 2026).
+    Hollow and instant graduations are left out (they are rejected anyway)."""
+    pos = config.POSITIVE_LABELS
+    toks = []
+    for mint, lab, feats in conn.execute(
+            """SELECT l.mint, l.label, l.features FROM labels l
+               WHERE l.rule_version = ? AND EXISTS (SELECT 1 FROM snapshots s WHERE s.mint = l.mint
+                     AND s.offset = '1h' AND (s.holders IS NOT NULL OR s.dexs_profile IS NOT NULL))""",
+            (config.RULE_VERSION,)):
+        f = json.loads(feats or "{}")
+        if (f.get("grad_mcap") or 0) < config.HOLLOW_MCAP_USD or f.get("bonding_minutes") == 0:
+            continue
+        toks.append((lab, detail(conn, mint)))
+    out = []
+    for key, title, buckets in METRICS:
+        rows = []
+        for name, test in buckets:
+            sel = [lab for lab, d in toks if d[key] is not None and test(d[key])]
+            n = len(sel)
+            rows.append({"bucket": name, "n": n,
+                         "runner": round(sum(l in pos for l in sel) / n, 3) if n else None,
+                         "rug": round(sum(l == "rug" for l in sel) / n, 3) if n else None})
+        out.append({"key": key, "title": title, "rows": rows})
+    n_all = len(toks)
+    return {"n": n_all, "min_n": MIN_N, "metrics": out,
+            "base_runner": round(sum(l in pos for l, _ in toks) / n_all, 3) if n_all else None,
+            "base_rug": round(sum(l == "rug" for l, _ in toks) / n_all, 3) if n_all else None}
+
+
 # ---------------------------------------------------------------- page
 
 def _r(v, k=2):
@@ -285,6 +352,10 @@ def build(conn: sqlite3.Connection, now: datetime, prices: dict[str, float] | No
                 "warnings": json.loads(r["warnings"] or "[]"), "reasons": json.loads(r["reasons"] or "[]"),
                 "label": r["label"], "status": r["status"]}
 
+    def with_detail(d):
+        d.update(detail(conn, d["mint"]))
+        return d
+
     signals, watching, rejected = [], [], []
     for r in rows:
         d = base(r)
@@ -295,9 +366,9 @@ def build(conn: sqlite3.Connection, now: datetime, prices: dict[str, float] | No
                       "now_mult": _r(prices[r["mint"]] / e) if e and prices.get(r["mint"]) else None,
                       "max_mult": _r(o.get("max_mult")), "last": _r(o.get("last")), "rugged": o.get("rugged"),
                       "plan": _r(o.get("plan")), "tp13": _r(o.get("x_tp13_nosl")), "tp2": _r(o.get("x_tp2_sl06"))})
-            signals.append(d)
+            signals.append(with_detail(d))
         elif r["status"] == "pending":
-            watching.append(d)
+            watching.append(with_detail(d) if len(watching) < 80 else d)
         else:
             rejected.append(d)
 
@@ -331,6 +402,7 @@ def build(conn: sqlite3.Connection, now: datetime, prices: dict[str, float] | No
                                  for r in rej_lab if r["label"] in pos][:30],
         },
         "signals": signals, "watching": watching[:80],
+        "holder_metrics": holder_metrics(conn),
         "reasons_24h": reasons.most_common(), "rejected_24h": len(rej24), "near_misses": near,
     }
 

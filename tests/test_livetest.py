@@ -126,3 +126,19 @@ def test_score_and_page(conn, tmp_path):
     js = json.loads((tmp_path / "live.json").read_text())
     assert js["summary"]["signals"] == 1 and js["summary"]["hit2"] == 1.0 and js["summary"]["runner_label"] == 1.0
     assert (tmp_path / "live.html").exists()
+
+
+def test_holder_metrics_buckets(conn):
+    for i, (top10, lab) in enumerate([(20, "runner_other"), (80, "rug"), (85, "dead")]):
+        m = f"H{i}"
+        add(conn, m)
+        conn.execute("UPDATE snapshots SET holders = 500, top10_pct = ?, dev_pct = 0, dexs_profile = ? "
+                     "WHERE mint = ? AND offset = '1h'", (top10, int(i == 0), m))
+        db.upsert(conn, "labels", [{"mint": m, "rule_version": "v0.2", "label": lab, "source": "t",
+                                    "features": json.dumps({"grad_mcap": 40000, "bonding_minutes": 10})}],
+                  key=("mint", "rule_version"))
+    h = L.holder_metrics(conn)
+    top = {r["bucket"]: r for r in next(m for m in h["metrics"] if m["key"] == "top10")["rows"]}
+    assert h["n"] == 3 and top["< 30%"]["runner"] == 1.0 and top["≥ 70%"]["n"] == 2 and top["≥ 70%"]["rug"] == 0.5
+    paid = {r["bucket"]: r["n"] for r in next(m for m in h["metrics"] if m["key"] == "dex_paid")["rows"]}
+    assert paid == {"ya": 1, "tidak": 2}

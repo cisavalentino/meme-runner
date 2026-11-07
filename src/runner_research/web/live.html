@@ -58,6 +58,12 @@ a.tok{color:var(--ink);font-weight:600}a.tok:hover{color:var(--s1)}
 .br .k{text-align:right;color:var(--ink2);font-variant-numeric:tabular-nums}
 .empty{padding:28px;text-align:center;color:var(--muted)}
 .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:0 24px}
+.mgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:12px}
+.mcard{background:var(--card);border:1px solid var(--ring);border-radius:12px;padding:12px 14px}
+.mcard b{display:block;margin-bottom:6px;font-size:13px}
+.mcard table{width:100%;min-width:0;font-size:12.5px}
+.mcard td,.mcard th{padding:4px 6px;position:static}
+.few{color:var(--muted)}
 details.def{margin-top:28px;color:var(--ink2);font-size:13px;max-width:900px}
 details.def summary{cursor:pointer;color:var(--ink)}
 details.def p{margin:6px 0}
@@ -94,6 +100,10 @@ details.def p{margin:6px 0}
 </div>
 </div>
 
+<h2>Holder, dev, sniper: apakah membedakan runner dari rug?</h2>
+<p class="hint" id="hmn"></p>
+<div class="mgrid" id="hm"></div>
+
 <h2>Nyaris lolos</h2>
 <p class="hint">Token yang hanya gagal satu cek harga (bukan karena graduation kosong/instan). Berguna untuk melihat apakah batasnya terlalu ketat.</p>
 <div class="scroll"><table id="near"></table></div>
@@ -107,6 +117,7 @@ details.def p{margin:6px 0}
   <p><b>Harga graduation</b> diambil dari isi pool saat dibuat (transaksi migrasi), bukan dari candle pertama, jadi tidak bergeser kalau GeckoTerminal terlambat mencatat candle. Kelipatan 15m/60m dihitung dalam token quote (biasanya SOL), jadi pergerakan harga SOL tidak ikut terhitung.</p>
   <p><b>Narasi panas</b>: kata di nama/simbol yang dalam 24 jam terakhir dipakai token lain yang sudah ≥ 3x di menit 60-nya. Hari pertama live test daftar ini belum lengkap.</p>
   <p><b>Tanpa link X</b> tidak lagi menolak token (aturan r2), hanya diberi peringatan. Di backtest Oktober, sinyal tanpa X: 12,5% runner (n=32) vs 23% yang punya X.</p>
+  <p><b>Holder, Top10, Dev</b> dari GeckoTerminal di jam 1. Dev = dompet creator itu sendiri saja; dompet yang terhubung (seperti "DEV" di GMGN) tidak terlihat. Top10 bisa termasuk akun pool. <b>Sniper</b> = porsi volume beli jam pertama yang terjadi di 2 menit pertama, hanya untuk token yang trade-nya tercatat lengkap. <b>Dex paid</b> = ada profil berbayar di DexScreener. Bundler, insider, dan phishing ala GMGN tidak tersedia di API gratis.</p>
   <p><b>Penilaian</b>: label runner (slow_climb / runner_other) diambil dari pipeline harian setelah jendela 72 jam ditutup. Hasil rencana belum termasuk fee dan slippage. Di backtest, tidak ada rencana keluar yang rata-rata untung, jadi live test ini untuk menguji apakah sinyalnya bertahan, bukan bukti profit.</p>
 </details>
 </main>
@@ -147,8 +158,9 @@ function render(d){
     [S.plan_mean==null?"–":x(S.plan_mean),"hasil rata-rata rencana",`per 1x modal · backtest ${x(B.plan_mean)}`],
   ];
   document.getElementById("tiles").innerHTML=tiles.map(t=>`<div class="tile"><div class="v">${t[0]}</div><div class="l">${t[1]}</div><div class="c">${t[2]}</div></div>`).join("");
-  table("sig",[["Waktu (WIB)"],["Token"],["MC graduation","num"],["15m","num"],["60m","num"],["MC masuk","num"],["Sekarang","num"],["Maks 72j","num"],["Rencana","num"],["Label"],["Peringatan"]],
-    d.signals.map(r=>`<tr><td>${wib(r.t0)}</td><td>${tok(r)}</td><td class="num">${usd(r.grad_mcap)}</td><td class="num">${x(r.m15)}</td><td class="num">${x(r.m60)}</td><td class="num">${usd(r.entry_mcap)}</td><td class="num ${cls(r.now_mult)}">${r.status==="scored"?"–":x(r.now_mult)}</td><td class="num">${r.max_mult==null?`<span class="st-wait">${ago(r.t0)}</span>`:x(r.max_mult)}</td><td class="num ${cls(r.plan)}">${x(r.plan)}</td><td>${lbl(r.label)}</td><td class="wrap">${warns(r.warnings)}</td></tr>`),
+  const p0=v=>v==null?"–":Math.round(v)+"%",yn=v=>v==null?"–":v?"ya":"tidak";
+  table("sig",[["Waktu (WIB)"],["Token"],["MC graduation","num"],["15m","num"],["60m","num"],["MC masuk","num"],["Sekarang","num"],["Maks 72j","num"],["Rencana","num"],["Label"],["Holder","num"],["Top10","num"],["Dev","num"],["Sniper","num"],["Dex paid"],["Peringatan"]],
+    d.signals.map(r=>`<tr><td>${wib(r.t0)}</td><td>${tok(r)}</td><td class="num">${usd(r.grad_mcap)}</td><td class="num">${x(r.m15)}</td><td class="num">${x(r.m60)}</td><td class="num">${usd(r.entry_mcap)}</td><td class="num ${cls(r.now_mult)}">${r.status==="scored"?"–":x(r.now_mult)}</td><td class="num">${r.max_mult==null?`<span class="st-wait">${ago(r.t0)}</span>`:x(r.max_mult)}</td><td class="num ${cls(r.plan)}">${x(r.plan)}</td><td>${lbl(r.label)}</td><td class="num">${r.holders??"–"}</td><td class="num">${p0(r.top10)}</td><td class="num">${p0(r.dev)}</td><td class="num">${r.sniper==null?"–":p0(r.sniper*100)}</td><td>${yn(r.dex_paid)}</td><td class="wrap">${warns(r.warnings)}</td></tr>`),
     "Belum ada sinyal. Rata-rata sekitar 5 sinyal per hari, jadi tunggu beberapa jam.");
   table("watch",[["Waktu (WIB)"],["Token"],["Umur","num"],["MC graduation","num"],["15m","num"],["Peringatan"]],
     d.watching.map(r=>`<tr><td>${wib(r.t0)}</td><td>${tok(r)}</td><td class="num">${ago(r.t0)}</td><td class="num">${usd(r.grad_mcap)}</td><td class="num">${x(r.m15)}</td><td class="wrap">${warns(r.warnings)}</td></tr>`),
@@ -156,6 +168,9 @@ function render(d){
   const mx=Math.max(1,...d.reasons_24h.map(r=>r[1]));
   document.getElementById("rejn").textContent=`${d.rejected_24h} token ditolak. Satu token bisa gagal beberapa cek sekaligus.`;
   document.getElementById("reasons").innerHTML=d.reasons_24h.length?d.reasons_24h.map(([k,n])=>`<div class="br" title="${esc(k)}: ${n}"><span>${esc(k)}</span><div class="t" style="width:${(n/mx*100).toFixed(1)}%"></div><span class="k">${n}</span></div>`).join(""):`<div class="empty">Belum ada.</div>`;
+  const H=d.holder_metrics;
+  document.getElementById("hmn").innerHTML=`Token berlabel yang punya data holder jam 1: <b>${H.n}</b> (tanpa graduation kosong/instan). Rata-rata: ${pct(H.base_runner)} runner, ${pct(H.base_rug)} rug. Kelompok dengan kurang dari ${H.min_n} token ditandai abu-abu, karena terlalu sedikit untuk disimpulkan. Data dikumpulkan untuk semua token sejak 7 Nov; label muncul 72 jam kemudian, jadi bagian ini baru berarti setelah sekitar 2 minggu.`;
+  document.getElementById("hm").innerHTML=H.metrics.map(m=>`<div class="mcard"><b>${esc(m.title)}</b><table><thead><tr><th>Kelompok</th><th class="num">n</th><th class="num">Runner</th><th class="num">Rug</th></tr></thead><tbody>${m.rows.map(r=>`<tr class="${r.n<H.min_n?"few":""}"><td>${esc(r.bucket)}</td><td class="num">${r.n}</td><td class="num">${pct(r.runner)}</td><td class="num">${pct(r.rug)}</td></tr>`).join("")}</tbody></table></div>`).join("");
   table("near",[["Waktu (WIB)"],["Token"],["MC graduation","num"],["15m","num"],["60m","num"],["Gagal di"],["Label"]],
     d.near_misses.map(r=>`<tr><td>${wib(r.t0)}</td><td>${tok(r)}</td><td class="num">${usd(r.grad_mcap)}</td><td class="num">${x(r.m15)}</td><td class="num">${x(r.m60)}</td><td>${esc(r.reasons[0])}</td><td>${lbl(r.label)}</td></tr>`),
     "Belum ada.");

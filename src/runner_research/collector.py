@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from . import db
-from .config import FEATURE_CUTOFF_MIN, GECKO_DETAIL_SAMPLE, SNAPSHOT_OFFSETS_MIN, TRADE_POLL_EVERY_MIN
+from .config import FEATURE_CUTOFF_MIN, GECKO_DETAIL_SAMPLE, HOLDERS_SAMPLE, SNAPSHOT_OFFSETS_MIN, TRADE_POLL_EVERY_MIN
 from .features import Trade, trade_features
 
 log = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ def is_on_time(target_at: datetime, taken_at: datetime) -> bool:
 # ---------------------------------------------------------------- snapshots
 
 def take_snapshots(conn: sqlite3.Connection, dexs, gecko, now: datetime,
-                   detail_sample: float = GECKO_DETAIL_SAMPLE) -> int:
+                   detail_sample: float = HOLDERS_SAMPLE) -> int:
     from .ingest import sampled
     due = due_snapshots(conn, now)
     if not due:
@@ -130,9 +130,12 @@ def trade_poll_targets(conn: sqlite3.Connection, now: datetime, sample: float = 
     toks = conn.execute("SELECT mint, canonical_pool, graduated_at FROM tokens "
                         "WHERE graduated_at >= ? AND graduated_at <= ? AND canonical_pool IS NOT NULL",
                         (lo, now.isoformat())).fetchall()
+    # live test: every token it has not rejected (no row yet = not decided)
+    rejected = {r[0] for r in conn.execute(
+        "SELECT mint FROM live_signals WHERE t0 >= ? AND status = 'rejected'", (lo,))}
     out = []
     for t in toks:
-        if not sampled(t["mint"], sample):
+        if not sampled(t["mint"], sample) and t["mint"] in rejected:
             continue
         t0 = datetime.fromisoformat(t["graduated_at"])
         last = conn.execute("SELECT MAX(polled_at) FROM trade_polls WHERE mint = ?", (t["mint"],)).fetchone()[0]
