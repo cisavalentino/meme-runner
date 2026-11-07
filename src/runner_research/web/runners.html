@@ -56,6 +56,7 @@ td.addr a{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5
 .pk{display:flex;align-items:center;gap:8px;justify-content:flex-end}
 .pk span{display:inline-block;height:6px;border-radius:3px;background:var(--s1);min-width:2px}
 tbody tr:hover td{background:var(--hover)}
+a.tok{color:var(--ink)}a.tok:hover{color:var(--s1)}
 .empty{padding:40px;text-align:center;color:var(--muted)}
 </style>
 </head>
@@ -109,6 +110,7 @@ function cell(k,r){
   if(k==="pair_address")return`<td class="addr"><a href="https://dexscreener.com/solana/${esc(v)}" target="_blank" rel="noopener">${esc(String(v).slice(0,6))}…${esc(String(v).slice(-4))}</a></td>`;
   if(k==="label")return`<td><span class="lbl ${esc(v)}"><i></i>${esc(v)}</span></td>`;
   if(k==="note")return`<td class="note">${esc(v)}</td>`;
+  if(k==="name")return`<td><a class="tok" href="https://gmgn.ai/sol/token/${esc(r.token_address)}" target="_blank" rel="noopener" title="Buka di GMGN">${esc(v)}</a></td>`;
   if(k==="graduated_utc")return`<td>${esc(String(v).slice(0,16).replace("T"," "))}</td>`;
   if(k==="peak_mult_72h"&&v!=null){const w=Math.max(2,Math.round(60*Math.log10(Math.max(v,1))/Math.log10(maxPeak)));return`<td class="num"><div class="pk"><span style="width:${Math.min(60,w)}px"></span>${esc(fmt(k,v))}</div></td>`}
   const cls=NUM.has(k)?"num"+(CHG.has(k)&&v!=null?(v>=0?" up":" down"):""):"";
