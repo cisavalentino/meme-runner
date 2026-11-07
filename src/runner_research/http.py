@@ -104,9 +104,13 @@ class ApiClient:
 _SECRET_QS = re.compile(r"((?:api[-_]?key|apikey|access[-_]?token|auth[-_]?token)=)[^&\s\"']+", re.I)
 
 
+_TG_TOKEN = re.compile(r"/bot\d+:[A-Za-z0-9_-]+")
+
+
 def redact_url(text: str) -> str:
-    """Hide secrets passed as query parameters (e.g. Helius `?api-key=`)."""
-    return _SECRET_QS.sub(r"\1***", text)
+    """Hide secrets passed as query parameters (e.g. Helius `?api-key=`) and
+    the Telegram bot token in the API path."""
+    return _TG_TOKEN.sub("/bot***", _SECRET_QS.sub(r"\1***", text))
 
 
 class RedactFilter(logging.Filter):

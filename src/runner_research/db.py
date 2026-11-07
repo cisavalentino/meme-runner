@@ -173,6 +173,15 @@ CREATE TABLE IF NOT EXISTS live_signals (
     PRIMARY KEY (mint, rule)
 );
 CREATE INDEX IF NOT EXISTS ix_live_t0 ON live_signals(t0);
+
+-- Telegram alerts sent (kind: signal | result), so each goes out once.
+CREATE TABLE IF NOT EXISTS alerts (
+    mint     TEXT NOT NULL,
+    kind     TEXT NOT NULL,
+    sent_at  TEXT NOT NULL,
+    messages TEXT,                   -- JSON chat id -> message id (results reply to it)
+    PRIMARY KEY (mint, kind)
+);
 """
 
 # Columns added after the first release: (table, column, type). connect() adds missing ones.

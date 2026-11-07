@@ -156,6 +156,10 @@ def main(argv: list[str] | None = None) -> int:
     lt.add_argument("--once", action="store_true")
     lt.add_argument("--every", type=int, default=30, help="seconds between steps")
     lt.add_argument("--out", default="web/meme-research")
+    sub.add_parser("telegram-chats", help="chats that messaged the bot (to find TELEGRAM_CHAT_ID)")
+    tt = sub.add_parser("telegram-test", help="send a sample signal alert for a mint (or print it with --dry)")
+    tt.add_argument("mint")
+    tt.add_argument("--dry", action="store_true")
     h = sub.add_parser("health", help="exit 1 if the collector heartbeat is older than --max-age seconds")
     h.add_argument("--max-age", type=int, default=300)
 
@@ -294,13 +298,19 @@ def main(argv: list[str] | None = None) -> int:
         api = ApiClient()
         now = datetime.now(timezone.utc)
         print(f"reserves backfilled: {livetest.backfill_reserves(conn, rpc, now - timedelta(hours=27))}", flush=True)
+        from . import telegram
+        from .alerts import send_alerts
         prices, priced_at = {}, None
+        tg = telegram.from_env()
+        print(f"telegram alerts: {'on, ' + str(len(tg.chat_ids)) + ' chat(s)' if tg else 'off (no TELEGRAM_BOT_TOKEN/CHAT_ID)'}",
+              flush=True)
         with httpx.Client(timeout=20, follow_redirects=True, headers={"User-Agent": "runner-research"}) as client:
             while True:
                 now = datetime.now(timezone.utc)
                 out = {"at": now.isoformat(timespec="seconds")}
                 for name, fn in (("step", lambda: livetest.step(conn, gecko, rpc, client, now)),
-                                 ("scored", lambda: livetest.score(conn, now))):
+                                 ("scored", lambda: livetest.score(conn, now)),
+                                 ("alerts", lambda: send_alerts(conn, tg, api, gecko, client, now) if tg else None)):
                     try:
                         out[name] = fn()
                     except Exception as e:
@@ -316,6 +326,48 @@ def main(argv: list[str] | None = None) -> int:
                 if a.once:
                     break
                 time.sleep(max(1.0, a.every - (datetime.now(timezone.utc) - now).total_seconds()))
+    elif a.cmd in ("telegram-chats", "telegram-test"):
+        import httpx
+        from . import livetest, telegram
+        from .alerts import fetch_image, signal_message
+        from .http import ApiClient
+        from .webpage import fetch_pairs
+        tg = telegram.from_env(need_chat=a.cmd == "telegram-test" and not a.dry)
+        if a.cmd == "telegram-chats":
+            if tg is None:
+                print("set TELEGRAM_BOT_TOKEN in .env, send any message to the bot, then rerun")
+                return 1
+            for c in tg.chats():
+                print(json.dumps(c, ensure_ascii=False))
+            return 0
+        _, rpc, _, gecko = clients()
+        now = datetime.now(timezone.utc)
+        r = conn.execute("""SELECT t.*, p.quote_mint, p.pool_base, p.pool_quote, m.image FROM tokens t
+                            LEFT JOIN pools p ON p.pool = t.canonical_pool LEFT JOIN token_meta m USING (mint)
+                            WHERE t.mint = ?""", (a.mint,)).fetchone()
+        if r is None:
+            print("unknown mint")
+            return 1
+        with httpx.Client(timeout=20, follow_redirects=True) as client:
+            meta = livetest.ensure_meta(conn, client, rpc, a.mint)
+            f = livetest.features(conn, r, meta, set(), [])
+            try:
+                f["max_jump_1h"], _ = livetest.first_hour_jump(gecko, r["canonical_pool"], datetime.fromisoformat(r["graduated_at"]))
+                info = gecko.token_info(a.mint)
+            except Exception:
+                info = None
+            from . import strategy
+            text = signal_message({"mint": a.mint, "name": r["name"], "symbol": r["symbol"], "t0": r["graduated_at"]},
+                                  f, fetch_pairs(ApiClient(), [a.mint]).get(a.mint), info,
+                                  conn.execute("SELECT COUNT(*) FROM tokens WHERE creator = ? AND graduated_at < ?",
+                                               (r["creator"], r["graduated_at"])).fetchone()[0],
+                                  ["CONTOH, bukan sinyal sungguhan"] + strategy.warnings(f), now, livetest.RULE.version)
+            if a.dry or tg is None:
+                print(text)
+                if tg is None and not a.dry:
+                    print("\n(not sent: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env)")
+            else:
+                print(tg.send(text, fetch_image(client, (meta or {}).get("image"))))
     elif a.cmd == "health":
         hb = db.get_state(conn, "collector_heartbeat")
         age = (datetime.now(timezone.utc) - datetime.fromisoformat(json.loads(hb)["at"])).total_seconds() if hb else None
