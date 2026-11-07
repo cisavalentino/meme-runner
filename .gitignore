@@ -6,4 +6,4 @@ data/
 *.sqlite
 *.duckdb
 reports/
-web/
+/web/

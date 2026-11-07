@@ -17,7 +17,7 @@ module.exports = { apps: [
 
   // FR5 + FR7 daily at 00:20 UTC: label newly closed windows, rewrite reports/analysis.json.
   { name: 'rr-daily', cwd: __dirname, script: 'bash', interpreter: 'none', time: true,
-    args: ['-c', '.venv/bin/rr label && .venv/bin/rr analyze'],
+    args: ['-c', '.venv/bin/rr label && .venv/bin/rr analyze && .venv/bin/rr enrich-meta'],
     autorestart: false, cron_restart: '20 0 * * *' },
 
   // Watchdog every 10 min: restart the collector if its heartbeat is older than 10 min (hung loop).
@@ -29,5 +29,11 @@ module.exports = { apps: [
   // Caddy proxies /meme-research/* on the public domain to this port.
   { name: 'rr-web', cwd: __dirname, script: '.venv/bin/python', interpreter: 'none', time: true,
     args: ['-m', 'http.server', '8795', '--bind', '127.0.0.1', '--directory', 'web'], autorestart: true },
-  rr('rr-runners', 'runners-page --out web/meme-research', { autorestart: false, cron_restart: '*/15 * * * *' }),
+  // Live test of the runner rule (strategy.LIVE_RULE): decides each graduation at T0+60m,
+  // scores signals after 72h, writes web/meme-research/live.json every 30 s.
+  rr('rr-live', 'live-test', { autorestart: true, restart_delay: 30000 }),
+  // Runner table (live DexScreener) + insights.json, every 15 min.
+  { name: 'rr-runners', cwd: __dirname, script: 'bash', interpreter: 'none', time: true,
+    args: ['-c', '.venv/bin/rr runners-page && .venv/bin/rr insights'],
+    autorestart: false, cron_restart: '*/15 * * * *' },
 ] };

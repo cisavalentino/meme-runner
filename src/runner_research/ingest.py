@@ -39,7 +39,8 @@ def store_migrations(conn: sqlite3.Connection, rpc: SolanaRpc, migs: list[Migrat
         return 0
     curves = rpc.accounts([m.bonding_curve for m in migs], encoding="base64")
     mints = rpc.accounts([m.mint for m in migs], encoding="jsonParsed")
-    toks, pools = [], []
+    from .meta import uri_from_account
+    toks, pools, uris = [], [], []
     for m, curve, mint in zip(migs, curves, mints):
         meta = mint_metadata(mint)
         created = rpc.oldest_signature_time(m.bonding_curve) if with_created_at else None
@@ -52,10 +53,17 @@ def store_migrations(conn: sqlite3.Connection, rpc: SolanaRpc, migs: list[Migrat
             "bonding_minutes": (m.graduated_at - created).total_seconds() / 60 if created else None,
             "bonding_curve": m.bonding_curve, "migrate_tx": m.signature, "source": "rpc",
         })
-        pools.append({"pool": m.pool, "mint": m.mint, "dex": "pumpswap", "quote_mint": "So11111111111111111111111111111111111111112",
+        pools.append({"pool": m.pool, "mint": m.mint, "dex": "pumpswap",
+                      "quote_mint": m.quote_mint or "So11111111111111111111111111111111111111112",
+                      "pool_base": m.pool_base, "pool_quote": m.pool_quote,
                       "created_at": m.graduated_at.isoformat(timespec="seconds"), "is_canonical": 1, "source": "rpc"})
+        uris.append((m.mint, uri_from_account(mint)))
     db.upsert(conn, "tokens", toks, key=("mint",))
     db.upsert(conn, "pools", pools, key=("pool",))
+    # metadata uri is in the mint account we already read; the JSON is fetched later
+    conn.executemany("INSERT OR IGNORE INTO token_meta (mint, uri, status, fetched_at) VALUES (?, ?, ?, ?)",
+                     [(m, u, None if u else "no_uri", db.now_iso()) for m, u in uris])
+    conn.commit()
     return len(toks)
 
 
@@ -175,3 +183,36 @@ def fetch_candles(conn: sqlite3.Connection, gecko: Gecko, now: datetime | None =
                                       "updated_at": db.now_iso()}], key=("job", "day"))
         done += 1
     return done
+
+
+def repair_pools(conn: sqlite3.Connection, rpc: SolanaRpc, mints: list[str], chunk: int = 50) -> dict:
+    """Re-read migration txs: store pool reserves, and fix the canonical pool
+    where the old parser took the wrong MigrateV2 account. A fixed token loses
+    its empty candle result so the backlog fetches it again."""
+    from .solana import parse_migration
+    out = {"checked": 0, "fixed_pool": 0, "reserves": 0}
+    todo = conn.execute(f"SELECT mint, migrate_tx, canonical_pool FROM tokens WHERE mint IN "
+                        f"(SELECT value FROM json_each(?)) AND migrate_tx IS NOT NULL",
+                        (__import__("json").dumps(mints),)).fetchall()
+    for i in range(0, len(todo), chunk):
+        part = todo[i:i + chunk]
+        for r, tx in zip(part, rpc.transactions([p["migrate_tx"] for p in part])):
+            m = parse_migration(tx, r["migrate_tx"]) if tx else None
+            out["checked"] += 1
+            if not m:
+                continue
+            if m.pool != r["canonical_pool"]:
+                conn.execute("UPDATE tokens SET canonical_pool = ? WHERE mint = ?", (m.pool, m.mint))
+                conn.execute("UPDATE pools SET is_canonical = 0 WHERE pool = ?", (r["canonical_pool"],))
+                conn.execute("DELETE FROM job_runs WHERE job = 'fr2' AND day = ?", (m.mint,))
+                out["fixed_pool"] += 1
+            db.upsert(conn, "pools", [{"pool": m.pool, "mint": m.mint, "dex": "pumpswap",
+                                       "quote_mint": m.quote_mint or "So11111111111111111111111111111111111111112",
+                                       "pool_base": m.pool_base, "pool_quote": m.pool_quote,
+                                       "created_at": m.graduated_at.isoformat(timespec="seconds"),
+                                       "is_canonical": 1, "source": "rpc"}], key=("pool",))
+            out["reserves"] += m.pool_base is not None
+        conn.commit()
+        if (i // chunk) % 20 == 0:
+            log.info("repair-pools %d/%d %s", i + len(part), len(todo), out)
+    return out

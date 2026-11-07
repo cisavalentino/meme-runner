@@ -24,6 +24,7 @@ def snapshot_from_pair(p: dict) -> dict:
     for the dead rule at 25h); `volume_usd` is the last 24h."""
     return {
         "price": float(p["priceUsd"]) if p.get("priceUsd") else None,
+        "price_native": float(p["priceNative"]) if p.get("priceNative") else None,
         "liquidity": (p.get("liquidity") or {}).get("usd"),
         "mcap": p.get("marketCap") or p.get("fdv"),
         "volume_usd": (p.get("volume") or {}).get("h24"),

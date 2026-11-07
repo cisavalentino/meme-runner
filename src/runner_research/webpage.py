@@ -30,7 +30,8 @@ JUMP_FLAG = 50.0
 def runners(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     q = f"""SELECT t.mint, t.name, t.symbol, t.canonical_pool, t.graduated_at, l.label, l.peak_multiple,
                    l.hours_to_peak, l.close_24h_vs_peak, json_extract(l.features, '$.grad_mcap') grad_mcap,
-                   (SELECT MAX(c.close / c.open) FROM candles_5m c WHERE c.pool = t.canonical_pool AND c.open > 0)
+                   (SELECT MAX(c.close / c.open) FROM candles_5m c WHERE c.pool = t.canonical_pool AND c.open > 0
+                    AND c.close >= 5 * json_extract(l.features, '$.grad_price'))
                    AS max_jump
             FROM labels l JOIN tokens t USING (mint)
             WHERE l.rule_version = ? AND l.label IN ({','.join('?' * len(RUNNER_LABELS))})
@@ -133,5 +134,7 @@ def write_page(conn: sqlite3.Connection, api: ApiClient, out: str | Path, now: d
     tmp = out / "data.json.tmp"
     tmp.write_text(json.dumps(data, separators=(",", ":")))
     tmp.replace(out / "data.json")
-    (out / "index.html").write_text((Path(__file__).parent / "web" / "index.html").read_text())
+    web = Path(__file__).parent / "web"
+    (out / "runners.html").write_text((web / "runners.html").read_text())
+    (out / "index.html").write_text((web / "insights.html").read_text())
     return len(rows)

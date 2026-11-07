@@ -20,6 +20,8 @@ def test_parse_migration():
     m = solana.parse_migration(load("rpc_migrate_tx.json"))
     assert (m.mint, m.pool, m.bonding_curve) == (MINT, POOL, CURVE)
     assert m.graduated_at == datetime(2026, 11, 5, 5, 13, 41, tzinfo=timezone.utc)
+    # first pool price comes from the reserves after CreatePool
+    assert m.quote_mint == solana.WSOL and m.pool_base == 206_900_000 and abs(m.pool_quote - 67.405855429) < 1e-9
 
 
 def test_non_migration_and_failed_tx_are_ignored():
@@ -109,3 +111,13 @@ def test_api_key_is_redacted_from_logs_and_errors(caplog):
     rec = logging.LogRecord("t", logging.WARNING, __file__, 1, "POST %s -> 429", (url,), None)
     RedactFilter().filter(rec)
     assert "abc-123" not in rec.getMessage()
+
+
+def test_pool_comes_from_the_vault_owner():
+    tx = load("rpc_migrate_tx.json")
+    real = "RealPool1111111111111111111111111111111111"
+    for b in tx["meta"]["postTokenBalances"]:
+        if b.get("owner") == POOL:
+            b["owner"] = real                      # MigrateV2 account list points elsewhere
+    m = solana.parse_migration(tx)
+    assert m.pool == real and m.pool_base == 206_900_000

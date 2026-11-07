@@ -145,8 +145,23 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status", help="store and backfill progress")
     lb = sub.add_parser("label", help="FR4+FR5: label tokens whose 72h window has closed")
     lb.add_argument("--all", action="store_true", help="relabel every token (default: only unlabeled)")
+    em = sub.add_parser("enrich-meta", help="metadata JSON (socials, description) for labeled tokens")
+    em.add_argument("--workers", type=int, default=8)
+    em.add_argument("--limit", type=int, default=None)
+    ins = sub.add_parser("insights", help="trader-facing insights.json for the web page")
+    ins.add_argument("--out", default="web/meme-research")
     wp = sub.add_parser("runners-page", help="write the runner list (data.json + index.html) for the web")
     wp.add_argument("--out", default="web/meme-research")
+    lt = sub.add_parser("live-test", help="live test of the runner rule: decide at T0+60m, score after 72h")
+    lt.add_argument("--once", action="store_true")
+    lt.add_argument("--every", type=int, default=30, help="seconds between steps")
+    lt.add_argument("--out", default="web/meme-research")
+    rp = sub.add_parser("repair-pools", help="re-read migration txs: fix wrong canonical pools, store reserves")
+    rp.add_argument("--recent-days", type=float, default=4, help="also every token of the last N days")
+    sub.add_parser("telegram-chats", help="chats that messaged the bot (to find TELEGRAM_CHAT_ID)")
+    tt = sub.add_parser("telegram-test", help="send a sample signal alert for a mint (or print it with --dry)")
+    tt.add_argument("mint")
+    tt.add_argument("--dry", action="store_true")
     h = sub.add_parser("health", help="exit 1 if the collector heartbeat is older than --max-age seconds")
     h.add_argument("--max-age", type=int, default=300)
 
@@ -262,10 +277,110 @@ def main(argv: list[str] | None = None) -> int:
             print(d.mint, d.offset, d.target_at.isoformat())
     elif a.cmd == "status":
         status(conn)
+    elif a.cmd == "enrich-meta":
+        from .meta import fetch_json, fetch_uris
+        _, rpc, _, _ = clients()
+        todo = [r[0] for r in conn.execute(
+            "SELECT l.mint FROM labels l LEFT JOIN token_meta m USING (mint) WHERE m.mint IS NULL")]
+        print(f"uris: {fetch_uris(conn, rpc, todo)}")
+        print(f"json: {fetch_json(conn, a.workers, a.limit)}")
+    elif a.cmd == "insights":
+        from .insights import write
+        write(conn, a.out, datetime.now(timezone.utc))
+        print(f"wrote {a.out}/insights.json")
     elif a.cmd == "runners-page":
         from .http import ApiClient
         from .webpage import write_page
         print(f"wrote {write_page(conn, ApiClient(), a.out)} runners to {a.out}")
+    elif a.cmd == "live-test":
+        import httpx
+        from . import livetest
+        from .http import ApiClient, redact_url
+        _, rpc, _, gecko = clients()
+        api = ApiClient()
+        now = datetime.now(timezone.utc)
+        print(f"reserves backfilled: {livetest.backfill_reserves(conn, rpc, now - timedelta(hours=27))}", flush=True)
+        from . import telegram
+        from .alerts import send_alerts
+        prices, priced_at = {}, None
+        tg = telegram.from_env()
+        print(f"telegram alerts: {'on, ' + str(len(tg.chat_ids)) + ' chat(s)' if tg else 'off (no TELEGRAM_BOT_TOKEN/CHAT_ID)'}",
+              flush=True)
+        with httpx.Client(timeout=20, follow_redirects=True, headers={"User-Agent": "runner-research"}) as client:
+            while True:
+                now = datetime.now(timezone.utc)
+                out = {"at": now.isoformat(timespec="seconds")}
+                for name, fn in (("step", lambda: livetest.step(conn, gecko, rpc, client, now)),
+                                 ("scored", lambda: livetest.score(conn, now)),
+                                 ("alerts", lambda: send_alerts(conn, tg, api, gecko, client, now) if tg else None)):
+                    try:
+                        out[name] = fn()
+                    except Exception as e:
+                        logging.getLogger(__name__).exception("live-test %s", name)
+                        out[name] = redact_url(f"error: {type(e).__name__}: {e}")[:200]
+                if priced_at is None or now - priced_at >= timedelta(minutes=5):
+                    try:
+                        prices, priced_at = livetest.open_prices(conn, api), now
+                    except Exception as e:
+                        out["prices"] = redact_url(f"error: {e}")[:200]
+                out["signals"] = livetest.write(conn, a.out, now, prices)
+                print(json.dumps(out), flush=True)
+                if a.once:
+                    break
+                time.sleep(max(1.0, a.every - (datetime.now(timezone.utc) - now).total_seconds()))
+    elif a.cmd == "repair-pools":
+        from .ingest import repair_pools
+        _, rpc, _, _ = clients()
+        since = (datetime.now(timezone.utc) - timedelta(days=a.recent_days)).isoformat(timespec="seconds")
+        mints = [r[0] for r in conn.execute(
+            """SELECT t.mint FROM tokens t LEFT JOIN pools p ON p.pool = t.canonical_pool
+               WHERE p.pool_base IS NULL AND (t.graduated_at >= ? OR EXISTS (
+                   SELECT 1 FROM job_runs j WHERE j.job = 'fr2' AND j.day = t.mint AND j.status = 'done'
+                   AND NOT EXISTS (SELECT 1 FROM candles_5m c WHERE c.pool = t.canonical_pool)))""", (since,))]
+        print(f"{len(mints)} tokens to check", flush=True)
+        print(json.dumps(repair_pools(conn, rpc, mints)))
+    elif a.cmd in ("telegram-chats", "telegram-test"):
+        import httpx
+        from . import livetest, telegram
+        from .alerts import fetch_image, signal_message
+        from .http import ApiClient
+        from .webpage import fetch_pairs
+        tg = telegram.from_env(need_chat=a.cmd == "telegram-test" and not a.dry)
+        if a.cmd == "telegram-chats":
+            if tg is None:
+                print("set TELEGRAM_BOT_TOKEN in .env, send any message to the bot, then rerun")
+                return 1
+            for c in tg.chats():
+                print(json.dumps(c, ensure_ascii=False))
+            return 0
+        _, rpc, _, gecko = clients()
+        now = datetime.now(timezone.utc)
+        r = conn.execute("""SELECT t.*, p.quote_mint, p.pool_base, p.pool_quote, m.image FROM tokens t
+                            LEFT JOIN pools p ON p.pool = t.canonical_pool LEFT JOIN token_meta m USING (mint)
+                            WHERE t.mint = ?""", (a.mint,)).fetchone()
+        if r is None:
+            print("unknown mint")
+            return 1
+        with httpx.Client(timeout=20, follow_redirects=True) as client:
+            meta = livetest.ensure_meta(conn, client, rpc, a.mint)
+            f = livetest.features(conn, r, meta, set(), [])
+            try:
+                f["max_jump_1h"], _ = livetest.first_hour_jump(gecko, r["canonical_pool"], datetime.fromisoformat(r["graduated_at"]))
+                info = gecko.token_info(a.mint)
+            except Exception:
+                info = None
+            from . import strategy
+            text = signal_message({"mint": a.mint, "name": r["name"], "symbol": r["symbol"], "t0": r["graduated_at"]},
+                                  f, fetch_pairs(ApiClient(), [a.mint]).get(a.mint), info,
+                                  conn.execute("SELECT COUNT(*) FROM tokens WHERE creator = ? AND graduated_at < ?",
+                                               (r["creator"], r["graduated_at"])).fetchone()[0],
+                                  ["CONTOH, bukan sinyal sungguhan"] + strategy.warnings(f), now, livetest.RULE.version)
+            if a.dry or tg is None:
+                print(text)
+                if tg is None and not a.dry:
+                    print("\n(not sent: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env)")
+            else:
+                print(tg.send(text, fetch_image(client, (meta or {}).get("image"))))
     elif a.cmd == "health":
         hb = db.get_state(conn, "collector_heartbeat")
         age = (datetime.now(timezone.utc) - datetime.fromisoformat(json.loads(hb)["at"])).total_seconds() if hb else None

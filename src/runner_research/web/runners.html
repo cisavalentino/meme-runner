@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daftar Runner</title>
+<meta name="robots" content="noindex">
+<style>
+:root{color-scheme:light;--page:#f9f9f7;--card:#fff;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--ring:rgba(11,11,11,.10);--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--up:#006300;--down:#d03b3b;--warnink:#7a5200;--head:#f4f4f1;--hover:#f4f4f1}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){color-scheme:dark;--page:#0d0d0d;--card:#161615;--ink:#f0efec;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--s3:#199e70;--up:#0ca30c;--down:#e66767;--warnink:#e0b04a;--head:#1c1c1b;--hover:#1f1f1e}}
+:root[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--card:#161615;--ink:#f0efec;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--s3:#199e70;--up:#0ca30c;--down:#e66767;--warnink:#e0b04a;--head:#1c1c1b;--hover:#1f1f1e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--s1);text-decoration:none}a:hover{text-decoration:underline}
+.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--page) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--ring)}
+.top .in{max-width:1600px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{font-weight:700}
+.tabs{display:flex;gap:4px}
+.tabs a{padding:6px 12px;border-radius:999px;color:var(--ink2);font-size:14px}
+.tabs a.on{background:var(--ink);color:var(--page)}
+.tabs a:hover{text-decoration:none;background:var(--ring)}.tabs a.on:hover{background:var(--ink)}
+.stamp{margin-left:auto;color:var(--muted);font-size:12.5px}
+header{max-width:1600px;margin:0 auto;padding:28px 16px 4px}
+h1{font-size:clamp(22px,3vw,30px);margin:0 0 6px;letter-spacing:-.02em}
+.sub{color:var(--ink2);max-width:820px;margin:0}
+.tiles{max-width:1600px;margin:16px auto 0;padding:0 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.tile{background:var(--card);border:1px solid var(--ring);border-radius:12px;padding:12px 14px}
+.tile .v{font-size:24px;font-weight:700;letter-spacing:-.02em}
+.tile .l{color:var(--ink2);font-size:12.5px}
+details.def{max-width:1600px;margin:12px auto 0;padding:0 16px;color:var(--ink2);font-size:13px}
+details.def summary{cursor:pointer;color:var(--muted)}
+details.def p{margin:6px 0}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:14px 16px 8px;max-width:1600px;margin:0 auto}
+input[type=search]{flex:1 1 240px;min-width:0;padding:9px 12px;border:1px solid var(--ring);border-radius:10px;background:var(--card);color:var(--ink);font:inherit}
+.chip{border:1px solid var(--ring);background:var(--card);color:var(--ink2);border-radius:999px;padding:6px 12px;cursor:pointer;font:inherit;font-size:13px}
+.chip[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--page)}
+button.dl{border:1px solid var(--ring);background:var(--card);color:var(--ink);border-radius:10px;padding:7px 12px;cursor:pointer;font:inherit;font-size:13px}
+.stats{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:12.5px;padding:0 16px 8px;max-width:1600px;margin:0 auto}
+.stats b{color:var(--ink)}
+.wrap{max-width:1600px;margin:0 auto 40px;padding:0 16px}
+.scroll{overflow:auto;max-height:calc(100vh - 150px);border:1px solid var(--ring);border-radius:12px;background:var(--card)}
+table{border-collapse:separate;border-spacing:0;font-size:12.5px;width:max-content;min-width:100%}
+th,td{padding:8px 10px;border-bottom:1px solid var(--grid);white-space:nowrap;text-align:left;vertical-align:top}
+th{position:sticky;top:0;background:var(--head);z-index:2;cursor:pointer;user-select:none;font-weight:600;color:var(--muted);font-size:11.5px;letter-spacing:.02em}
+th.sorted{color:var(--ink)}
+th .arr{opacity:.7;margin-left:3px}
+td:nth-child(1){position:sticky;left:0;background:var(--card);z-index:1;font-weight:600;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+th:nth-child(1){position:sticky;left:0;background:var(--head);z-index:3}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.note{white-space:normal;min-width:240px;max-width:340px;color:var(--warnink);font-size:12px}
+td.addr a{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+.up{color:var(--up)}.down{color:var(--down)}
+.lbl{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11.5px;border:1px solid var(--ring)}
+.lbl i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+.lbl.runner_other i{background:var(--s1)}.lbl.slow_climb i{background:var(--s3)}.lbl.second_wave i{background:var(--s2)}
+.pk{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.pk span{display:inline-block;height:6px;border-radius:3px;background:var(--s1);min-width:2px}
+tbody tr:hover td{background:var(--hover)}
+a.tok{color:var(--ink)}a.tok:hover{color:var(--s1)}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="top"><div class="in">
+  <span class="brand">Meme Runner Research</span>
+  <nav class="tabs"><a href="./">Insight</a><a class="on" href="runners.html">Daftar runner</a><a href="live.html">Live test</a></nav>
+  <span class="stamp" id="gen">memuat…</span>
+</div></div>
+<header>
+  <h1>Daftar runner</h1>
+  <p class="sub">Token pump.fun yang naik ≥ 5x dalam 72 jam setelah graduation, ditambah kondisinya di pasar sekarang (live dari DexScreener, diperbarui setiap 15 menit).</p>
+</header>
+<div class="tiles" id="tiles"></div>
+<details class="def">
+  <summary>Arti label dan kolom</summary>
+  <p><b>runner_other</b>: puncak ≥ 5x harga graduation dalam 72 jam. <b>slow_climb</b>: puncak ≥ 5x setelah ≥ 6 jam, dan di jam ke-24 masih ≥ 60% dari puncak. <b>second_wave</b>: setelah jam ke-24 turun di bawah 2x, lalu naik ≥ 5x dari dasar itu.</p>
+  <p>Kolom pasar (price_usd … chg_24h) adalah kondisi <i>sekarang</i>, bukan saat puncak. <b>peak_mult_72h</b>: puncak dibanding harga graduation. <b>max_5m_jump</b>: lonjakan terbesar dalam satu candle 5 menit. Token dengan lonjakan ≥ 50x disembunyikan secara default, karena biasanya suntikan pool, bukan runner organik.</p>
+  <p>Token sebelum 5 Nov adalah sampel acak 30%; setelahnya semua token.</p>
+</details>
+<div class="bar">
+  <input type="search" id="q" placeholder="Cari nama, simbol, alamat, catatan…" aria-label="Cari">
+  <span id="chips"></span>
+  <button class="chip" id="alive" aria-pressed="false" title="Hanya token dengan likuiditas ≥ $1.000">masih likuid</button>
+  <button class="chip" id="jumps" aria-pressed="true" title="Sembunyikan token yang naik ≥ 50x dalam satu candle 5 menit">sembunyikan lonjakan 1 candle</button>
+  <button class="dl" id="dl">Unduh CSV</button>
+</div>
+<div class="stats" id="stats"></div>
+<div class="wrap"><div class="scroll"><table id="t"><thead></thead><tbody></tbody></table><div class="empty" id="empty" hidden>Tidak ada token yang cocok.</div></div></div>
+<script>
+const NUM=new Set(["price_usd","liquidity_usd","mcap_usd","vol_24h","vol_1h","txns_1h_buys","txns_1h_sells","chg_1h","chg_6h","chg_24h","grad_mcap_usd","peak_mult_72h","hours_to_peak","close24h_vs_peak","max_5m_jump"]);
+const CHG=new Set(["chg_1h","chg_6h","chg_24h"]);
+// Screen order puts what matters first; the CSV keeps the original column order.
+const DISP=["name","symbol","label","peak_mult_72h","hours_to_peak","close24h_vs_peak","graduated_utc","mcap_usd","liquidity_usd","price_usd","vol_24h","vol_1h","txns_1h_buys","txns_1h_sells","chg_1h","chg_6h","chg_24h","note","quote","dex","token_address","pair_address","grad_mcap_usd","max_5m_jump","snapshot_utc"];
+let data=null,sortKey="peak_mult_72h",sortDir=-1,active=new Set(),q="",hideJumps=true,aliveOnly=false,maxPeak=10;
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const isJump=r=>(r.max_5m_jump||0)>=data.jump_flag;
+function fmt(k,v){
+  if(v==null||v==="")return"";
+  if(k==="price_usd")return v<0.001?Number(v).toPrecision(4):Number(v).toFixed(6);
+  if(CHG.has(k))return(v>0?"+":"")+Number(v).toFixed(2)+"%";
+  if(k==="peak_mult_72h"||k==="max_5m_jump")return Number(v).toFixed(1)+"x";
+  if(k==="hours_to_peak")return Number(v).toFixed(1);
+  if(k==="close24h_vs_peak")return Math.round(v*100)+"%";
+  if(typeof v==="number"&&NUM.has(k))return Math.round(v).toLocaleString("en-US");
+  return v;
+}
+function cell(k,r){
+  const v=r[k];
+  if(k==="token_address")return`<td class="addr"><a href="https://solscan.io/token/${esc(v)}" target="_blank" rel="noopener">${esc(v.slice(0,6))}…${esc(v.slice(-4))}</a></td>`;
+  if(k==="pair_address")return`<td class="addr"><a href="https://dexscreener.com/solana/${esc(v)}" target="_blank" rel="noopener">${esc(String(v).slice(0,6))}…${esc(String(v).slice(-4))}</a></td>`;
+  if(k==="label")return`<td><span class="lbl ${esc(v)}"><i></i>${esc(v)}</span></td>`;
+  if(k==="note")return`<td class="note">${esc(v)}</td>`;
+  if(k==="name")return`<td><a class="tok" href="https://gmgn.ai/sol/token/${esc(r.token_address)}" target="_blank" rel="noopener" title="Buka di GMGN">${esc(v)}</a></td>`;
+  if(k==="graduated_utc")return`<td>${esc(String(v).slice(0,16).replace("T"," "))}</td>`;
+  if(k==="peak_mult_72h"&&v!=null){const w=Math.max(2,Math.round(60*Math.log10(Math.max(v,1))/Math.log10(maxPeak)));return`<td class="num"><div class="pk"><span style="width:${Math.min(60,w)}px"></span>${esc(fmt(k,v))}</div></td>`}
+  const cls=NUM.has(k)?"num"+(CHG.has(k)&&v!=null?(v>=0?" up":" down"):""):"";
+  return`<td class="${cls}">${esc(fmt(k,v))}</td>`;
+}
+function rows(){
+  const ql=q.toLowerCase();
+  let rs=data.rows.filter(r=>(!aliveOnly||(r.liquidity_usd||0)>=1000)&&(!hideJumps||!isJump(r))&&(!active.size||active.has(r.label))&&(!ql||[r.name,r.symbol,r.token_address,r.pair_address,r.note,r.quote].some(x=>String(x??"").toLowerCase().includes(ql))));
+  rs.sort((a,b)=>{const x=a[sortKey],y=b[sortKey];if(x==null&&y==null)return 0;if(x==null)return 1;if(y==null)return-1;return(x>y?1:x<y?-1:0)*sortDir});
+  return rs;
+}
+function render(){
+  const cols=[...DISP.filter(c=>data.columns.includes(c)),...data.columns.filter(c=>!DISP.includes(c))],rs=rows();
+  document.querySelector("#t thead").innerHTML="<tr>"+cols.map(c=>`<th class="${NUM.has(c)?"num":""}${c===sortKey?" sorted":""}" data-k="${c}" scope="col">${c}${c===sortKey?`<span class="arr">${sortDir>0?"▲":"▼"}</span>`:""}</th>`).join("")+"</tr>";
+  document.querySelector("#t tbody").innerHTML=rs.map(r=>"<tr>"+cols.map(c=>cell(c,r)).join("")+"</tr>").join("");
+  document.getElementById("empty").hidden=rs.length>0;
+  const live=rs.filter(r=>(r.liquidity_usd||0)>=1000).length,jumps=data.rows.filter(isJump).length;
+  document.getElementById("stats").innerHTML=`<span><b>${rs.length}</b> token ditampilkan${hideJumps?` (${jumps} lonjakan 1 candle disembunyikan)`:""}</span><span><b>${live}</b> masih likuid ≥ $1.000</span><span>klik judul kolom untuk mengurutkan</span>`;
+}
+function csv(){
+  const cols=data.columns,rs=rows();
+  const line=a=>a.map(v=>{v=v??"";v=String(v);return/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}).join(",");
+  const blob=new Blob([[line(cols),...rs.map(r=>line(cols.map(c=>r[c])))].join("\n")],{type:"text/csv"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`meme-runners-${data.generated_utc.slice(0,10)}.csv`;a.click();
+}
+document.querySelector("#t thead").addEventListener("click",e=>{const th=e.target.closest("th");if(!th)return;const k=th.dataset.k;if(k===sortKey)sortDir=-sortDir;else{sortKey=k;sortDir=NUM.has(k)?-1:1}render()});
+document.getElementById("q").addEventListener("input",e=>{q=e.target.value;render()});
+document.getElementById("dl").addEventListener("click",csv);
+document.getElementById("alive").addEventListener("click",e=>{aliveOnly=!aliveOnly;e.currentTarget.setAttribute("aria-pressed",aliveOnly);render()});
+document.getElementById("jumps").addEventListener("click",e=>{hideJumps=!hideJumps;e.currentTarget.setAttribute("aria-pressed",hideJumps);render()});
+fetch("data.json",{cache:"no-store"}).then(r=>r.json()).then(d=>{
+  data=d;
+  document.getElementById("gen").textContent="snapshot "+d.generated_utc.replace("T"," ").slice(0,16)+" UTC";
+  const org=d.rows.filter(r=>!isJump(r));maxPeak=Math.max(10,...org.map(r=>r.peak_mult_72h||1));
+  const pk=org.map(r=>r.peak_mult_72h).sort((a,b)=>a-b),med=pk[Math.floor(pk.length/2)]||0;
+  const alive=org.filter(r=>(r.liquidity_usd||0)>=1000).length,big=org.filter(r=>(r.mcap_usd||0)>=1e6).length;
+  const T=[[org.length,"runner organik"],[med.toFixed(1).replace(".",",")+"x","puncak median"],[alive,"masih likuid ≥ $1.000"],[big,"market cap sekarang ≥ $1 juta"]];
+  document.getElementById("tiles").innerHTML=T.map(([v,l])=>`<div class="tile"><div class="v">${esc(v)}</div><div class="l">${esc(l)}</div></div>`).join("");
+  document.getElementById("chips").innerHTML=d.labels.map(l=>`<button class="chip" aria-pressed="false" data-l="${l}">${l} · ${org.filter(r=>r.label===l).length}</button>`).join(" ");
+  document.getElementById("chips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;const l=b.dataset.l;active.has(l)?active.delete(l):active.add(l);b.setAttribute("aria-pressed",active.has(l));render()});
+  render();
+}).catch(e=>{document.getElementById("gen").textContent="gagal memuat data.json";});
+</script>
+</body>
+</html>

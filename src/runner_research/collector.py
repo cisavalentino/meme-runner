@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from . import db
-from .config import FEATURE_CUTOFF_MIN, GECKO_DETAIL_SAMPLE, SNAPSHOT_OFFSETS_MIN, TRADE_POLL_EVERY_MIN
+from .config import FEATURE_CUTOFF_MIN, GECKO_DETAIL_SAMPLE, HOLDERS_SAMPLE, SNAPSHOT_OFFSETS_MIN, TRADE_POLL_EVERY_MIN
 from .features import Trade, trade_features
 
 log = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ def is_on_time(target_at: datetime, taken_at: datetime) -> bool:
 # ---------------------------------------------------------------- snapshots
 
 def take_snapshots(conn: sqlite3.Connection, dexs, gecko, now: datetime,
-                   detail_sample: float = GECKO_DETAIL_SAMPLE) -> int:
+                   detail_sample: float = HOLDERS_SAMPLE) -> int:
     from .ingest import sampled
     due = due_snapshots(conn, now)
     if not due:
@@ -80,7 +80,7 @@ def take_snapshots(conn: sqlite3.Connection, dexs, gecko, now: datetime,
         if snap is None:
             continue  # not listed yet; retried until GIVE_UP_AFTER
         snap.pop("_canon", None)
-        row = {"mint": d.mint, "offset": d.offset, "price": None, "liquidity": None, "mcap": None,
+        row = {"mint": d.mint, "offset": d.offset, "price": None, "price_native": None, "liquidity": None, "mcap": None,
                "volume_usd": None, "txns": None, "holders": None, "top10_pct": None, "dev_pct": None,
                "mint_auth": None, "freeze_auth": None, "dexs_profile": None, "dexs_boosts": None,
                **snap, "target_at": d.target_at.isoformat(timespec="seconds"),
@@ -130,9 +130,12 @@ def trade_poll_targets(conn: sqlite3.Connection, now: datetime, sample: float = 
     toks = conn.execute("SELECT mint, canonical_pool, graduated_at FROM tokens "
                         "WHERE graduated_at >= ? AND graduated_at <= ? AND canonical_pool IS NOT NULL",
                         (lo, now.isoformat())).fetchall()
+    # live test: every token it has not rejected (no row yet = not decided)
+    rejected = {r[0] for r in conn.execute(
+        "SELECT mint FROM live_signals WHERE t0 >= ? AND status = 'rejected'", (lo,))}
     out = []
     for t in toks:
-        if not sampled(t["mint"], sample):
+        if not sampled(t["mint"], sample) and t["mint"] in rejected:
             continue
         t0 = datetime.fromisoformat(t["graduated_at"])
         last = conn.execute("SELECT MAX(polled_at) FROM trade_polls WHERE mint = ?", (t["mint"],)).fetchone()[0]
@@ -144,9 +147,14 @@ def trade_poll_targets(conn: sqlite3.Connection, now: datetime, sample: float = 
     return out
 
 
-def poll_trades(conn: sqlite3.Connection, gecko, now: datetime, sample: float = GECKO_DETAIL_SAMPLE) -> int:
+TRADE_POLLS_PER_LOOP = 3   # keeps one loop short so snapshots stay on time; the rest wait a loop
+
+
+def poll_trades(conn: sqlite3.Connection, gecko, now: datetime, sample: float = GECKO_DETAIL_SAMPLE,
+                limit: int | None = TRADE_POLLS_PER_LOOP) -> int:
     n = 0
-    for t in trade_poll_targets(conn, now, sample):
+    targets = trade_poll_targets(conn, now, sample)
+    for t in targets[:limit] if limit else targets:
         try:
             trades = gecko.trades(t["canonical_pool"], t["mint"])
         except Exception as e:

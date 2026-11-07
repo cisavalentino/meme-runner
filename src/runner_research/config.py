@@ -66,7 +66,11 @@ GRAD_PRICE_FEATURES = ("grad_price", "grad_mcap")
 # Live collector / call budget. GeckoTerminal public API is ~10–30 calls/min with
 # no monthly cap; per-token trade polling is the expensive part, so it runs on a
 # deterministic hash sample of mints (unbiased; missing features stay missing).
-GECKO_DETAIL_SAMPLE = 0.2        # share of graduations that get trades + holders
+GECKO_DETAIL_SAMPLE = 0.2        # share of graduations that get first-hour trades
+# Holders / top10 / dev (one Gecko call at 1h and 24h): every graduation, for the
+# live test (Nov 2026). Trades are also polled for every token the live test
+# has not rejected yet (collector.trade_poll_targets).
+HOLDERS_SAMPLE = 1.0
 TRADE_POLL_EVERY_MIN = 10        # trades endpoint returns only the last 300 trades
 # Candles: tokens graduated after the collector went live (state `live_since`) all get
 # candles; older (backfilled) tokens get a hash sample, oldest first.

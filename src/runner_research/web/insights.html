@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meme Runner Research</title>
+<meta name="robots" content="noindex">
+<style>
+:root{
+  color-scheme:light;
+  --page:#f9f9f7;--surface:#fcfcfb;--card:#ffffff;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;
+  --grid:#e1e0d9;--axis:#c3c2b7;--ring:rgba(11,11,11,.10);
+  --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--neutral:#c9c8c1;
+  --good:#006300;--critical:#d03b3b;--warnbg:#fff6e0;--warnink:#7a5200;--okbg:#eaf6ea;--accentbg:#eaf2fc;
+  --radius:14px;
+}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){
+  color-scheme:dark;
+  --page:#0d0d0d;--surface:#1a1a19;--card:#161615;--ink:#f0efec;--ink2:#c3c2b7;--muted:#898781;
+  --grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--neutral:#4a4a46;
+  --good:#0ca30c;--critical:#e66767;--warnbg:#2a2210;--warnink:#e0b04a;--okbg:#122012;--accentbg:#14202f;
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --page:#0d0d0d;--surface:#1a1a19;--card:#161615;--ink:#f0efec;--ink2:#c3c2b7;--muted:#898781;
+  --grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--neutral:#4a4a46;
+  --good:#0ca30c;--critical:#e66767;--warnbg:#2a2210;--warnink:#e0b04a;--okbg:#122012;--accentbg:#14202f;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--page);color:var(--ink);font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--s1);text-decoration:none}a:hover{text-decoration:underline}
+.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--page) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--ring)}
+.top .in{max-width:1080px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{font-weight:700;letter-spacing:-.01em}
+.tabs{display:flex;gap:4px}
+.tabs a{padding:6px 12px;border-radius:999px;color:var(--ink2);font-size:14px}
+.tabs a.on{background:var(--ink);color:var(--page)}
+.tabs a:hover{text-decoration:none;background:var(--ring)}
+.tabs a.on:hover{background:var(--ink)}
+.stamp{margin-left:auto;color:var(--muted);font-size:12.5px}
+main{max-width:1080px;margin:0 auto;padding:0 16px 64px}
+.hero{padding:40px 0 8px}
+.hero h1{font-size:clamp(26px,4vw,38px);line-height:1.15;margin:0 0 10px;letter-spacing:-.02em}
+.hero p{color:var(--ink2);max-width:720px;margin:0}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:24px 0 8px}
+.tile{background:var(--card);border:1px solid var(--ring);border-radius:var(--radius);padding:16px}
+.tile .v{font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.tile .l{color:var(--ink2);font-size:13.5px;margin-top:4px}
+.tile .s{color:var(--muted);font-size:12px;margin-top:6px}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 4px}
+.toc a{border:1px solid var(--ring);background:var(--card);border-radius:999px;padding:5px 12px;font-size:13px;color:var(--ink2)}
+.toc a:hover{text-decoration:none;color:var(--ink);border-color:var(--axis)}
+.tldr{background:var(--card);border:1px solid var(--ring);border-radius:var(--radius);padding:20px 22px;margin:20px 0}
+.tldr h2{margin:0 0 10px;font-size:18px}
+.tldr ol{margin:0;padding-left:20px}
+.tldr li{margin:6px 0}
+section{margin-top:44px;scroll-margin-top:64px}
+section>h2{font-size:24px;letter-spacing:-.015em;margin:0 0 6px}
+section>.lead{color:var(--ink2);max-width:760px;margin:0 0 16px}
+.card{background:var(--card);border:1px solid var(--ring);border-radius:var(--radius);padding:18px 18px 12px;margin:14px 0}
+.card h3{font-size:15.5px;margin:0 0 2px}
+.card .sub{color:var(--muted);font-size:13px;margin:0 0 10px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:14px}
+.grid2 .card{margin:0}
+.take{border-radius:12px;padding:12px 14px;margin:12px 0 4px;font-size:14.5px;background:var(--accentbg)}
+.take>b:first-child{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--s1);margin-bottom:2px}
+.take.warn{background:var(--warnbg)}.take.warn>b:first-child{color:var(--warnink)}
+.take.ok{background:var(--okbg)}.take.ok>b:first-child{color:var(--good)}
+.chart{width:100%;position:relative}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--ink2);margin:2px 0 8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+details.tbl{margin:8px 0 4px}
+details.tbl summary{cursor:pointer;color:var(--muted);font-size:12.5px}
+details.tbl table{border-collapse:collapse;font-size:12.5px;margin-top:6px;width:100%}
+details.tbl th,details.tbl td{padding:4px 8px;border-bottom:1px solid var(--grid);text-align:left}
+details.tbl td.n{text-align:right;font-variant-numeric:tabular-nums}
+.tip{position:fixed;pointer-events:none;z-index:50;background:var(--card);color:var(--ink);border:1px solid var(--ring);box-shadow:0 6px 24px rgba(0,0,0,.12);border-radius:10px;padding:8px 10px;font-size:12.5px;line-height:1.4;max-width:260px;opacity:0;transition:opacity .08s}
+.tip .tv{font-size:15px;font-weight:700}
+.tip .tl{color:var(--ink2)}
+.tip .tm{color:var(--muted);font-size:11.5px}
+.signs{width:100%;border-collapse:collapse;font-size:14px}
+.signs th{font-size:12px;color:var(--muted);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--grid)}
+.signs td{padding:10px 8px;border-bottom:1px solid var(--grid);vertical-align:middle}
+.signs td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid var(--ring);color:var(--ink2);white-space:nowrap}
+.meter{height:8px;border-radius:4px;background:var(--grid);position:relative;min-width:90px}
+.meter i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:var(--s2)}
+.meter u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink2);text-decoration:none}
+.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+.steps li{counter-increment:s;position:relative;padding:12px 12px 12px 48px;border-bottom:1px solid var(--grid)}
+.steps li:last-child{border-bottom:0}
+.steps li::before{content:counter(s);position:absolute;left:8px;top:12px;width:28px;height:28px;border-radius:50%;background:var(--ink);color:var(--page);font-weight:700;font-size:13px;display:grid;place-items:center}
+.steps li>b{display:block}
+.steps li>span{color:var(--ink2);font-size:14px}
+.words{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.wl{list-style:none;padding:0;margin:0;font-size:13.5px}
+.wl li{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--grid)}
+.wl li span:last-child{color:var(--ink2);font-variant-numeric:tabular-nums}
+.ex{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ex span{font-size:12px;border:1px solid var(--ring);border-radius:999px;padding:2px 9px;color:var(--ink2)}
+.note{color:var(--muted);font-size:12.5px}
+.method{font-size:13.5px;color:var(--ink2)}
+.method li{margin:4px 0}
+@media (max-width:560px){.tiles{grid-template-columns:1fr 1fr}.tile .v{font-size:24px}.words{grid-template-columns:1fr}.stamp{display:none}.signs .hide-s{display:none}}
+</style>
+</head>
+<body>
+<div class="top"><div class="in">
+  <span class="brand">Meme Runner Research</span>
+  <nav class="tabs"><a class="on" href="./">Insight</a><a href="runners.html">Daftar runner</a><a href="live.html">Live test</a></nav>
+  <span class="stamp" id="stamp"></span>
+</div></div>
+<main>
+  <div class="hero">
+    <h1>Apa yang membedakan runner dari rug?</h1>
+    <p id="heroText">Memuat data…</p>
+  </div>
+  <div class="tiles" id="tiles"></div>
+  <nav class="toc" aria-label="Isi">
+    <a href="#jenis">Jenis graduation</a><a href="#jam1">Jam pertama</a><a href="#launch">Alat launch</a>
+    <a href="#sosial">Punya X?</a><a href="#narasi">Narasi</a><a href="#wave">Second wave</a>
+    <a href="#rug">Menghindari rug</a><a href="#playbook">Playbook</a><a href="#metode">Metode</a>
+  </nav>
+  <div class="tldr"><h2>Ringkasnya</h2><ol id="tldr"></ol></div>
+
+  <section id="jenis">
+    <h2>1. Tiga jenis graduation, nasibnya beda jauh</h2>
+    <p class="lead">Tidak semua token yang "lulus" dari bonding curve itu sama. Dari data on-chain ada tiga kelompok yang perilakunya sangat berbeda.</p>
+    <div class="card">
+      <h3>Nasib token setelah 72 jam, per jenis graduation</h3>
+      <p class="sub">Persentase token di tiap kelompok. Runner = naik ≥ 5x (termasuk second wave).</p>
+      <div class="legend" id="lgMix"></div>
+      <div class="chart" id="chSeg"></div>
+      <div id="tbSeg"></div>
+    </div>
+    <div class="grid2">
+      <div class="take ok" id="tkSegNormal"></div>
+      <div class="take warn" id="tkSegBad"></div>
+    </div>
+  </section>
+
+  <section id="jam1">
+    <h2>2. Jam pertama hampir menentukan segalanya</h2>
+    <p class="lead">Faktor yang terlihat sebelum harga bergerak (creator, nama, jam, lama bonding) hanya sedikit membantu. Begitu harga mulai bergerak, gambarannya langsung jelas.</p>
+    <div class="grid2">
+      <div class="card">
+        <h3>Peluang jadi runner menurut harga di menit ke-60</h3>
+        <p class="sub">Harga di menit 60 dibanding harga graduation. Garis = rata-rata.</p>
+        <div class="chart" id="chLadder"></div><div id="tbLadder"></div>
+      </div>
+      <div class="card">
+        <h3>…dan di menit ke-15</h3>
+        <p class="sub">Sinyal muncul lebih cepat, tapi lebih kasar.</p>
+        <div class="chart" id="chM15"></div><div id="tbM15"></div>
+      </div>
+    </div>
+    <div class="take" id="tkJam1"></div>
+    <div class="card">
+      <h3>Jam graduation (WIB)</h3>
+      <p class="sub">Efeknya kecil. Jangan dijadikan alasan utama.</p>
+      <div class="chart" id="chHour"></div><div id="tbHour"></div>
+    </div>
+  </section>
+
+  <section id="launch">
+    <h2>3. Alat launch ("launchpad") yang dipakai creator</h2>
+    <p class="lead">Semua token ini lulus dari pump.fun, tapi metadata-nya menunjukkan <b>alat apa yang dipakai untuk membuatnya</b>: UI bawaan pump.fun (ipfs.io) atau tool pihak ketiga seperti J7 Tracker, Uxento, dan RapidLaunch. Ini terlihat sejak detik pertama.</p>
+    <div class="card">
+      <h3>Nasib token per alat launch</h3>
+      <p class="sub">Hanya alat dengan ≥ 100 token.</p>
+      <div class="legend" id="lgMix2"></div>
+      <div class="chart" id="chTool"></div><div id="tbTool"></div>
+    </div>
+    <div class="take" id="tkTool"></div>
+  </section>
+
+  <section id="sosial">
+    <h2>4. Apakah punya akun X membantu?</h2>
+    <p class="lead">Kami membaca link X, Telegram, dan website yang ditulis creator di metadata token. Metadata ini dibuat sebelum graduation, jadi bisa dicek saat token baru lulus.</p>
+    <div class="grid2">
+      <div class="card"><h3>Peluang runner menurut jenis link X</h3><p class="sub" id="subSoc"></p><div class="chart" id="chTw"></div><div id="tbTw"></div></div>
+      <div class="card"><h3>Peluang rug menurut jenis link X</h3><p class="sub">Garis = rata-rata rug di sampel ini.</p><div class="chart" id="chTwRug"></div><div id="tbTwRug"></div></div>
+    </div>
+    <div class="take" id="tkSoc"></div>
+  </section>
+
+  <section id="narasi">
+    <h2>5. Narasi: tema apa yang jalan, dan bagaimana membuat pengecek narasi</h2>
+    <p class="lead">Tema diambil dari nama, simbol, dan deskripsi token. Lebar garis tipis di tiap batang menunjukkan ketidakpastian. Tema dengan sampel kecil punya rentang lebar, jadi jangan dibaca berlebihan.</p>
+    <div class="card"><h3>Peluang runner per tema</h3><p class="sub">Tanpa graduation kosong. Garis = rata-rata.</p><div class="chart" id="chTheme"></div><div id="tbTheme"></div></div>
+    <div class="grid2">
+      <div class="card"><h3>Kata di nama: paling sering jadi runner</h3><p class="sub" id="subWords"></p><ul class="wl" id="wBest"></ul></div>
+      <div class="card"><h3>Kata di nama: hampir tidak pernah jadi runner</h3><p class="sub">Biasanya tren yang sudah ramai ditiru.</p><ul class="wl" id="wWorst"></ul></div>
+    </div>
+    <div class="card">
+      <h3>Meniru narasi yang baru saja meledak = berbahaya</h3>
+      <p class="sub" id="subMom"></p>
+      <div class="grid2" style="margin-top:6px">
+        <div><div class="chart" id="chMomRun"></div></div>
+        <div><div class="chart" id="chMomRug"></div></div>
+      </div>
+      <div class="ex" id="momEx"></div>
+    </div>
+    <div class="take warn" id="tkMom"></div>
+    <div class="card">
+      <h3>Cara membangun pengecek narasi</h3>
+      <ol class="steps">
+        <li><b>Kumpulkan token baru secara live</b><span>Sistem ini sudah melakukannya: setiap graduation masuk dalam ±15 detik, lengkap dengan nama, simbol, creator, dan metadata.</span></li>
+        <li><b>Pecah nama jadi kata kunci dan tema</b><span>Seperti di atas: kata ≥ 3 huruf, tanpa kata umum ("coin", "token", "the"), lalu kelompokkan ke tema (AI, anjing, politik, saham, …).</span></li>
+        <li><b>Catat kata yang sedang "panas"</b><span>Kata menjadi panas jika ada token dengan kata itu yang naik ≥ 3x dalam 1 jam. Simpan waktunya, dan berlaku 24 jam.</span></li>
+        <li><b>Saat token baru lulus, cek apakah namanya menumpang kata panas</b><span>Data di atas menunjukkan peniru seperti ini lebih sering rug. Jadikan ini <i>peringatan</i>, bukan sinyal beli.</span></li>
+        <li><b>Tambahkan sinyal luar</b><span>Volume pencarian X/Google untuk kata itu, jumlah token baru dengan kata yang sama per jam (jenuh atau belum), dan apakah akun X yang dicantumkan benar-benar aktif. Ini butuh API X dan belum ada di data ini.</span></li>
+        <li><b>Ukur ulang setiap minggu</b><span>Narasi cepat berganti. Pipeline ini sudah melabeli ulang setiap hari, jadi tabel tema bisa diperbarui otomatis.</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="wave">
+    <h2>6. Mencari second wave</h2>
+    <p class="lead">Kita lihat kondisi token tepat 24 jam setelah graduation: token yang di hari pertama sempat naik ≥ 2x dan belum rug. Pertanyaannya, berapa yang naik lagi ≥ 3x dari harga jam ke-24 dalam 48 jam berikutnya?</p>
+    <div class="tiles" id="swTiles"></div>
+    <div class="grid2">
+      <div class="card"><h3>Menurut seberapa dalam turunnya di jam ke-24</h3><p class="sub">Harga jam ke-24 sebagai persen dari puncak hari pertama.</p><div class="chart" id="chSwDd"></div><div id="tbSwDd"></div></div>
+      <div class="card"><h3>Menurut volume di jam 20–24</h3><p class="sub">Volume USD 4 jam terakhir sebelum jam ke-24.</p><div class="chart" id="chSwVol"></div><div id="tbSwVol"></div></div>
+    </div>
+    <div class="take ok" id="tkWave"></div>
+  </section>
+
+  <section id="rug">
+    <h2>7. Menghindari rug</h2>
+    <p class="lead">Di sini "rug" berarti harga jatuh ke bawah 0,25% dari puncaknya dalam 72 jam, biasanya karena creator atau bundler membuang semua token mereka. LP di PumpSwap sudah dibakar, jadi rug terjadi lewat dump, bukan penarikan likuiditas.</p>
+    <div class="card">
+      <h3>Tanda bahaya dan seberapa sering berakhir rug</h3>
+      <p class="sub">Batang = % rug pada token yang punya tanda itu. Garis tegak = % rug pada token yang tidak punya tanda itu.</p>
+      <table class="signs" id="signs"></table>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Kapan rug terjadi?</h3><p class="sub">Waktu dari graduation sampai harga runtuh.</p><div class="chart" id="chRugT"></div><div id="tbRugT"></div></div>
+      <div class="card"><h3>Bisakah keluar sebelum rug?</h3><p class="sub" id="subOne"></p><div class="tiles" id="oneTiles" style="margin:6px 0 0"></div></div>
+    </div>
+    <div class="card">
+      <h3>Simulasi trailing stop: jual saat harga turun X% dari puncak</h3>
+      <p class="sub">Dicek setiap penutupan candle 5 menit, beli di harga graduation. Ini batas atas: di dunia nyata ada slippage dan delay.</p>
+      <div class="legend"><span><i style="background:var(--s2)"></i>rug yang berhasil dihindari</span><span><i style="background:var(--s1)"></i>runner yang ikut terjual</span></div>
+      <div class="chart" id="chStop"></div>
+      <div id="tbStop"></div>
+    </div>
+    <div class="take warn" id="tkRug"></div>
+  </section>
+
+  <section id="playbook">
+    <h2>8. Playbook: urutan pengecekan</h2>
+    <p class="lead">Disusun dari data di atas. Ini statistik masa lalu, bukan jaminan. Gunakan sebagai penyaring, bukan sebagai alasan untuk all-in.</p>
+    <div class="card"><ol class="steps" id="steps"></ol></div>
+  </section>
+
+  <section id="metode">
+    <h2>Metode & batasan</h2>
+    <ul class="method" id="method"></ul>
+  </section>
+</main>
+<div class="tip" id="tip" role="tooltip"></div>
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+const pct=(x,d=1)=>x==null?"–":(x*100).toFixed(x*100<1&&x>0?2:d).replace(".",",")+"%";
+const num=x=>x==null?"–":Number(x).toLocaleString("id-ID");
+const mult=x=>x==null?"–":Number(x).toFixed(x<10?1:0).replace(".",",")+"x";
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const SVGNS="http://www.w3.org/2000/svg";
+function s(tag,attrs={},parent){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e}
+function h(tag,attrs={},kids=[]){const e=document.createElement(tag);for(const k in attrs){if(k==="text")e.textContent=attrs[k];else if(k==="html")e.innerHTML=attrs[k];else e.setAttribute(k,attrs[k])}for(const c of kids)e.appendChild(typeof c==="string"?document.createTextNode(c):c);return e}
+const tip=$("#tip");
+function showTip(ev,lines){tip.replaceChildren(...lines.map(([cls,t])=>h("div",{class:cls,text:t})));tip.style.opacity=1;const x=Math.min(ev.clientX+14,innerWidth-tip.offsetWidth-8),y=Math.min(ev.clientY+14,innerHeight-tip.offsetHeight-8);tip.style.left=x+"px";tip.style.top=y+"px"}
+function hideTip(){tip.style.opacity=0}
+function bindTip(node,lines){node.addEventListener("pointermove",e=>showTip(e,lines));node.addEventListener("pointerleave",hideTip);node.setAttribute("tabindex","0");node.addEventListener("focus",()=>{const r=node.getBoundingClientRect();showTip({clientX:r.right,clientY:r.top},lines)});node.addEventListener("blur",hideTip)}
+function rateLines(r,what){return[["tv",pct(r.rate)],["tl",r.group],["tm",`${num(r.k)} dari ${num(r.n)} token ${what||""}`],["tm",`rentang 95%: ${pct(r.lo)} – ${pct(r.hi)}`]]}
+function table(el,cols,rows){
+  const d=h("details",{class:"tbl"},[h("summary",{text:"Lihat tabel"})]);
+  const t=h("table");t.appendChild(h("tr",{},cols.map(c=>h("th",{text:c[0]}))));
+  for(const r of rows)t.appendChild(h("tr",{},cols.map(c=>h("td",{class:c[2]?"n":"",text:c[1](r)}))));
+  d.appendChild(t);el.replaceChildren(d);
+}
+const renders=[];
+function chart(id,fn){const el=document.getElementById(id);const run=()=>{el.replaceChildren();fn(el,Math.max(280,el.clientWidth))};renders.push(run);run()}
+addEventListener("resize",()=>{clearTimeout(window._rz);window._rz=setTimeout(()=>renders.forEach(f=>f()),120)});
+
+// Horizontal bars with 95% interval + reference line
+function hbar(el,W,rows,o={}){
+  const lab=Math.min(190,W*.38),right=58,rowH=30,top=o.refLabel?18:6;
+  const H=top+rows.length*rowH+4,x0=lab,x1=W-right;
+  const max=o.max||Math.max(...rows.map(r=>r.hi??r.rate),o.ref||0)*1.08||1;
+  const X=v=>x0+(x1-x0)*Math.min(v,max)/max;
+  const svg=s("svg",{viewBox:`0 0 ${W} ${H}`,role:"img","aria-label":o.aria||""},el);
+  s("line",{x1:x0,x2:x0,y1:top-2,y2:H-2,stroke:css("--axis"),"stroke-width":1},svg);
+  rows.forEach((r,i)=>{
+    const y=top+i*rowH,g=s("g",{},svg),cy=y+rowH/2;
+    const t=s("text",{x:x0-8,y:cy+4,"text-anchor":"end","font-size":12.5,fill:css("--ink2")},g);t.textContent=r.group.length>28?r.group.slice(0,27)+"…":r.group;
+    const w=Math.max(2,X(r.rate)-x0),col=o.color?o.color(r):css("--s1");
+    s("path",{d:`M${x0},${cy-7} h${Math.max(0,w-4)} a4,4 0 0 1 4,4 v6 a4,4 0 0 1 -4,4 h-${Math.max(0,w-4)} z`,fill:col},g);
+    if(r.lo!=null){s("line",{x1:X(r.lo),x2:X(r.hi),y1:cy,y2:cy,stroke:css("--ink2"),"stroke-width":1.2,opacity:.7},g);
+      for(const v of[r.lo,r.hi])s("line",{x1:X(v),x2:X(v),y1:cy-4,y2:cy+4,stroke:css("--ink2"),"stroke-width":1.2,opacity:.7},g)}
+    const vt=s("text",{x:W-4,y:cy+4,"text-anchor":"end","font-size":12.5,fill:css("--ink"),"font-weight":600},g);vt.textContent=pct(r.rate);
+    const hit=s("rect",{x:0,y,width:W,height:rowH,fill:"transparent"},g);bindTip(hit,rateLines(r,o.what));
+  });
+  if(o.ref!=null){const xr=X(o.ref);s("line",{x1:xr,x2:xr,y1:top-4,y2:H-2,stroke:css("--ink"),"stroke-width":1.5,opacity:.55},svg);
+    const t=s("text",{x:xr+4,y:top-6,"font-size":11,fill:css("--muted"),stroke:css("--card"),"stroke-width":3,"paint-order":"stroke"},svg);t.textContent=(o.refLabel||"rata-rata")+" "+pct(o.ref)}
+}
+// Vertical ordinal bars
+function vbar(el,W,rows,o={}){
+  const H=o.H||220,l=8,r=8,t=24,b=44,n=rows.length,bw=(W-l-r)/n;
+  const max=Math.max(...rows.map(x=>o.val?o.val(x):(x.hi??x.rate)),o.ref||0)*1.1||1;
+  const Y=v=>t+(H-t-b)*(1-Math.min(v,max)/max);
+  const svg=s("svg",{viewBox:`0 0 ${W} ${H}`,role:"img","aria-label":o.aria||""},el);
+  s("line",{x1:l,x2:W-r,y1:H-b,y2:H-b,stroke:css("--axis")},svg);
+  const vals=rows.map(x=>o.val?o.val(x):x.rate),imax=vals.indexOf(Math.max(...vals));
+  rows.forEach((x,i)=>{
+    const v=vals[i],cx=l+bw*i+bw/2,w=Math.min(46,bw-8),y=Y(v),g=s("g",{},svg);
+    const hgt=Math.max(1.5,H-b-y),col=o.color?o.color(x,i,i===imax):css("--s1");
+    s("path",{d:`M${cx-w/2},${H-b} v-${Math.max(0,hgt-4)} a4,4 0 0 1 4,-4 h${w-8} a4,4 0 0 1 4,4 v${Math.max(0,hgt-4)} z`,fill:col},g);
+    if(x.lo!=null&&!o.val){s("line",{x1:cx,x2:cx,y1:Y(x.lo),y2:Y(x.hi),stroke:css("--ink2"),"stroke-width":1.2,opacity:.6},g)}
+    const fs=bw<44?10.5:11.5,cw=fs*.6,fits=t2=>t2.length*cw<=bw-2;
+    let parts=[x.group];
+    if(!fits(x.group)){const k=x.group.indexOf("–");parts=k>0?[x.group.slice(0,k+1),x.group.slice(k+1)]:x.group.split(" ")}
+    const lt=s("text",{x:cx,y:H-b+15,"text-anchor":"middle","font-size":fs,fill:css("--ink2")},g);
+    parts.forEach((p2,j)=>{const ts=s("tspan",{x:cx,dy:j?fs+2:0},lt);ts.textContent=p2});
+    if(i===imax||o.labelAll){const vt=s("text",{x:cx,y:Math.min(y,x.lo!=null&&!o.val?Y(x.hi):y)-6,"text-anchor":"middle","font-size":12,"font-weight":600,fill:css("--ink")},g);vt.textContent=o.val?num(v):pct(v)}
+    const hit=s("rect",{x:cx-bw/2,y:t-20,width:bw,height:H-t+20-b+30,fill:"transparent"},g);
+    bindTip(hit,o.val?[["tv",num(v)+" token"],["tl",x.group]]:rateLines(x,o.what));
+  });
+  if(o.ref!=null){const y=Y(o.ref);s("line",{x1:l,x2:W-r,y1:y,y2:y,stroke:css("--ink"),"stroke-width":1.2,opacity:.45},svg);
+    const tt=s("text",{x:W-r,y:y-5,"text-anchor":"end","font-size":11,fill:css("--muted"),stroke:css("--card"),"stroke-width":3,"paint-order":"stroke"},svg);tt.textContent="rata-rata "+pct(o.ref)}
+}
+// 100% stacked bars: runner / rug / dead / lain
+const MIX=[["runner","Runner","--s1"],["rug","Rug","--s2"],["lain","Lainnya","--s3"],["dead","Mati","--neutral"]];
+function legend(id){$(id).replaceChildren(...MIX.map(([k,l,c])=>h("span",{},[h("i",{style:`background:var(${c})`}),l])))}
+function stack(el,W,rows){
+  const lab=Math.min(170,W*.34),rowH=34,H=rows.length*rowH+4,x0=lab,x1=W-4;
+  const svg=s("svg",{viewBox:`0 0 ${W} ${H}`,role:"img"},el);
+  rows.forEach((r,i)=>{
+    const y=i*rowH+6,g=s("g",{},svg);
+    const t=s("text",{x:x0-8,y:y+15,"text-anchor":"end","font-size":12.5,fill:css("--ink2")},g);t.textContent=`${r.group} (${num(r.n)})`;
+    let x=x0;
+    MIX.forEach(([k,l,c])=>{const w=(x1-x0)*r[k];if(w<=0)return;const seg=s("rect",{x:x+1,y,width:Math.max(0,w-2),height:22,rx:4,fill:css(c)},g);
+      if(w>44){const tt=s("text",{x:x+w/2,y:y+15,"text-anchor":"middle","font-size":11.5,"font-weight":600,fill:k==="dead"?css("--ink"):"#fff"},g);tt.textContent=pct(r[k],0)}
+      bindTip(seg,[["tv",pct(r[k])],["tl",`${l} · ${r.group}`],["tm",`${num(Math.round(r[k]*r.n))} dari ${num(r.n)} token`]]);x+=w});
+  });
+}
+function mixTable(el,rows){table(el,[["Kelompok",r=>r.group],["Token",r=>num(r.n),1],...MIX.map(([k,l])=>[l,r=>pct(r[k]),1])],rows)}
+function rateTable(el,rows,label="Peluang"){table(el,[["Kelompok",r=>r.group],[label,r=>pct(r.rate),1],["Rentang 95%",r=>`${pct(r.lo)} – ${pct(r.hi)}`,1],["Token",r=>num(r.n),1]],rows)}
+
+fetch("insights.json",{cache:"no-store"}).then(r=>r.json()).then(D=>{
+  const O=D.overview,base=O.runner_core.rate;
+  $("#stamp").textContent="data "+D.generated_utc.replace("T"," ").slice(0,16)+" UTC";
+  $("#heroText").textContent=`Kami melacak ${num(O.tokens)} token pump.fun yang graduate antara ${O.from} dan ${O.to}, lalu melihat apa yang terjadi 72 jam setelahnya. Halaman ini merangkum pola yang muncul: siapa yang jadi runner, siapa yang rug, dan tanda apa yang bisa dilihat lebih awal.`;
+  const tiles=[[num(O.tokens),"token dianalisis",`${O.from} → ${O.to}`],[pct(O.runner.rate),"jadi runner (≥ 5x)",`${num(O.runner.k)} token`],[pct(O.rug.rate),"berakhir rug",`${num(O.rug.k)} token`],[pct(O.dead.rate),"mati pelan-pelan","tidak ada transaksi di jam ke-24"]];
+  $("#tiles").replaceChildren(...tiles.map(([v,l,s2])=>h("div",{class:"tile"},[h("div",{class:"v",text:v}),h("div",{class:"l",text:l}),h("div",{class:"s",text:s2})])));
+
+  const seg=Object.fromEntries(D.segments.mix.map(r=>[r.group,r]));
+  const L=D.first_hour.ladder,low=L.filter(r=>r.group.startsWith("<")||r.group.startsWith("0.1")),hiB=L.reduce((a,b)=>b.rate>a.rate?b:a);
+  const R=D.rugs,signs=Object.fromEntries(R.signs.map(x=>[x.sign.slice(0,12),x]));
+  const jump=R.signs.find(x=>x.sign.startsWith("Lonjakan")),inst=R.signs.find(x=>x.sign.startsWith("Graduation instan")),hot=R.signs.find(x=>x.sign.startsWith("Nama meniru"));
+  const st50=R.stops.find(x=>x.stop===0.5),SW=D.second_wave;
+  const swBest=SW.by_volume.reduce((a,b)=>b.rate>a.rate?b:a);
+  const tl=[
+    `<b>Buang graduation "kosong".</b> Harga pertamanya setara market cap di bawah $1.000. Dari ${num(seg.kosong?.n)} token, runner-nya ${pct(seg.kosong?.runner)}.`,
+    `<b>Hati-hati dengan graduation instan</b> (dibuat dan lulus di detik yang sama, biasanya bundle). ${pct(inst?.rug_yes.rate,0)} berakhir rug, padahal graduation normal hanya ${pct(seg.normal?.rug)}.`,
+    `<b>Jam pertama paling menentukan.</b> Token yang di menit 60 sudah di bawah 0,1x harga graduation hampir tidak pernah jadi runner. Yang di ${hiB.group} punya peluang ${pct(hiB.rate)}.`,
+    `<b>Lonjakan ≥ 50x dalam satu candle 5 menit adalah tanda bahaya.</b> ${pct(jump?.rug_yes.rate,0)} berakhir rug.`,
+    `<b>Meniru narasi yang baru meledak itu berisiko.</b> Peniru seperti ini ${pct(hot?.rug_yes.rate,0)} rug, dibanding ${pct(hot?.rug_no.rate,0)} untuk yang lain.`,
+    `<b>Sebagian besar rug tidak sempat dihindari.</b> ${pct(R.one_candle.rate,0)} runtuh dalam satu candle 5 menit. Trailing stop 50% hanya keluar duluan pada ${pct(st50.rugs_exited_before.rate,0)} rug, dan juga ikut menjual ${pct(st50.runners_stopped.rate,0)} runner terlalu cepat.`,
+    `<b>Second wave lebih mungkin kalau volumenya masih hidup.</b> Token yang di jam 20–24 masih punya volume ${swBest.group} punya peluang naik lagi ≥ 3x sebesar ${pct(swBest.rate)}, dibanding ${pct(SW.overall.rate)} secara umum.`,
+  ];
+  $("#tldr").innerHTML=tl.map(x=>`<li>${x}</li>`).join("");
+
+  // 1 segments
+  legend("#lgMix");legend("#lgMix2");
+  const segRows=D.segments.mix.map(r=>({...r,group:{normal:"Normal",instan:"Instan",kosong:"Kosong"}[r.group]||r.group}));
+  chart("chSeg",(el,W)=>stack(el,W,segRows));mixTable($("#tbSeg"),segRows);
+  $("#tkSegNormal").innerHTML=`<b>Normal</b>Bonding curve terisi pelan-pelan oleh banyak pembeli. Runner ${pct(seg.normal?.runner)}, rug hanya ${pct(seg.normal?.rug)}. Mayoritas akhirnya mati pelan, bukan dirug.`;
+  $("#tkSegBad").innerHTML=`<b>Instan & kosong</b>Instan: token dibuat dan dibeli habis dalam satu bundle. Hampir separuhnya rug (${pct(seg.instan?.rug,0)}). Kosong: harga pertamanya ±1000x di bawah normal, praktis tidak pernah jadi runner.`;
+
+  // 2 first hour
+  chart("chLadder",(el,W)=>vbar(el,W,L,{ref:base,what:"jadi runner",color:(x,i,isMax)=>isMax?css("--s1"):css("--s1")}));rateTable($("#tbLadder"),L);
+  chart("chM15",(el,W)=>vbar(el,W,D.first_hour.m15,{ref:base,what:"jadi runner"}));rateTable($("#tbM15"),D.first_hour.m15);
+  const dead1=L.filter(r=>r.group.startsWith("<"))[0];
+  $("#tkJam1").innerHTML=`<b>Artinya</b>Jangan buru-buru masuk di detik pertama. Dalam 15–60 menit pasar sudah "memilih". Dari ${num(dead1?.n)} token yang di menit 60 sudah di bawah 0,1x, runner-nya ${pct(dead1?.rate)}. Peluang terbaik ada di token yang sudah naik ${hiB.group} di menit 60 (${pct(hiB.rate)}, sekitar ${(hiB.rate/base).toFixed(0)}x rata-rata). Token yang naik lebih dari 5x dalam satu jam peluangnya justru turun lagi, karena banyak yang sudah habis dipompa.`;
+  chart("chHour",(el,W)=>vbar(el,W,D.timing.hour,{ref:base,H:190,what:"jadi runner"}));rateTable($("#tbHour"),D.timing.hour);
+
+  // 3 tools
+  chart("chTool",(el,W)=>stack(el,W,D.tools.mix));mixTable($("#tbTool"),D.tools.mix);
+  const tm=Object.fromEntries(D.tools.mix.map(r=>[r.group,r]));
+  const pf=tm["pump.fun (bawaan)"],j7=tm["J7 Tracker"];
+  $("#tkTool").innerHTML=`<b>Artinya</b>Token dari UI bawaan pump.fun paling sering rug (${pct(pf?.rug,0)}), karena hampir semua bundle instan memakai jalur ini. Token dari tool seperti J7 Tracker, Uxento, dan RapidLaunch jarang rug (${pct(j7?.rug)} untuk J7) dan lebih sering jadi runner (${pct(j7?.runner)}, dibanding ${pct(pf?.runner)} untuk UI bawaan). Tool ini dipakai trader dan creator yang lebih serius. Host metadata bisa dicek dari URI di akun mint.`;
+
+  // 4 socials
+  const So=D.socials;
+  $("#subSoc").textContent=`Sampel ${num(So.n)} token dengan metadata terbaca (masih bertambah). Garis = rata-rata.`;
+  const avg=a=>a.reduce((s2,r)=>s2+r.k,0)/Math.max(1,a.reduce((s2,r)=>s2+r.n,0));
+  chart("chTw",(el,W)=>hbar(el,W,So.twitter_runner,{ref:avg(So.twitter_runner),what:"jadi runner"}));rateTable($("#tbTw"),So.twitter_runner);
+  chart("chTwRug",(el,W)=>hbar(el,W,So.twitter_rug,{ref:avg(So.twitter_rug),what:"rug",color:()=>css("--s2")}));rateTable($("#tbTwRug"),So.twitter_rug,"Rug");
+  const tw=Object.fromEntries(So.twitter_rug.map(r=>[r.group,r]));
+  $("#tkSoc").innerHTML=`<b>Artinya</b>Punya link X <i>tidak</i> membuat token lebih sering jadi runner. Bedanya ada di rug: token <b>tanpa</b> link X jauh lebih sering rug (${pct(tw["tanpa X"]?.rate,0)}) daripada token yang mencantumkan tweet (${pct(tw["link tweet"]?.rate,0)}). Link X lebih berguna sebagai penyaring rug. Catatan: link bisa dipalsukan, jadi cek apakah akunnya hidup.`;
+
+  // 5 narrative
+  const N=D.narrative;
+  chart("chTheme",(el,W)=>hbar(el,W,N.themes,{ref:base,what:"jadi runner"}));rateTable($("#tbTheme"),N.themes);
+  $("#subWords").textContent=`Kata yang muncul di ≥ ${N.words.min_n} token, diurutkan dari batas bawah rentang 95%. Kata seperti trust, dividend, oil, dan fund berasal dari keluarga token bertema saham/ETF yang sering dipompa lewat suntikan pool, jadi tetap hati-hati.`;
+  const wl=(id,rows)=>$(id).replaceChildren(...rows.slice(0,10).map(r=>h("li",{},[h("span",{text:r.group}),h("span",{text:`${pct(r.rate)} · ${num(r.n)} token`})])));
+  wl("#wBest",N.words.best);wl("#wWorst",N.words.worst);
+  const M=N.momentum;
+  $("#subMom").textContent=`Token yang namanya memakai kata dari token lain yang naik ≥ ${M.hot_mult}x dalam ${M.window_h} jam terakhir ("panas"), dibanding yang tidak.`;
+  const momR=[{group:"Meniru narasi panas",...M.hot},{group:"Lainnya",...M.cold}],momG=[{group:"Meniru narasi panas",...M.hot_rug},{group:"Lainnya",...M.cold_rug}];
+  chart("chMomRun",(el,W)=>hbar(el,W,momR,{what:"jadi runner",aria:"Peluang runner"}));
+  chart("chMomRug",(el,W)=>hbar(el,W,momG,{what:"rug",color:()=>css("--s2"),aria:"Peluang rug"}));
+  $("#momEx").replaceChildren(h("span",{text:"Contoh peniru yang tetap jadi runner:"}),...M.examples.map(e=>h("span",{text:`${e.symbol} · ${e.date} · ${mult(e.peak)}`})));
+  $("#tkMom").innerHTML=`<b>Artinya</b>Begitu sebuah narasi meledak, puluhan peniru langsung muncul, dan kebanyakan dibuat untuk dirug. Peniru narasi panas rug ${pct(M.hot_rug.rate,0)} vs ${pct(M.cold_rug.rate,0)}, dan peluang runner-nya tidak lebih tinggi (${pct(M.hot.rate)} vs ${pct(M.cold.rate)}). Kata yang dulu panas (fomo, mrbeast, gta6, openai) hampir tidak pernah jadi runner lagi. Biasanya yang menang adalah token <i>pertama</i> di sebuah narasi, bukan peniru.`;
+
+  // 6 second wave
+  $("#swTiles").replaceChildren(
+    h("div",{class:"tile"},[h("div",{class:"v",text:num(SW.population)}),h("div",{class:"l",text:"token masih hidup di jam ke-24"}),h("div",{class:"s",text:"sempat naik ≥ 2x di hari pertama"})]),
+    h("div",{class:"tile"},[h("div",{class:"v",text:pct(SW.overall.rate)}),h("div",{class:"l",text:"naik lagi ≥ 3x dari harga jam ke-24"}),h("div",{class:"s",text:`${num(SW.overall.k)} token, dalam jam 24–72`})]),
+    h("div",{class:"tile"},[h("div",{class:"v",text:pct(swBest.rate)}),h("div",{class:"l",text:`kalau volume jam 20–24 ${swBest.group}`}),h("div",{class:"s",text:`${(swBest.rate/SW.overall.rate).toFixed(1).replace(".",",")}x lebih sering`})]));
+  chart("chSwDd",(el,W)=>hbar(el,W,SW.by_drawdown,{ref:SW.overall.rate,what:"naik lagi ≥ 3x"}));rateTable($("#tbSwDd"),SW.by_drawdown);
+  chart("chSwVol",(el,W)=>vbar(el,W,SW.by_volume,{ref:SW.overall.rate,what:"naik lagi ≥ 3x"}));rateTable($("#tbSwVol"),SW.by_volume);
+  const ddBest=SW.by_drawdown.reduce((a,b)=>b.rate>a.rate?b:a);
+  $("#tkWave").innerHTML=`<b>Pola second wave</b>Kandidat terbaik ada di token yang di jam ke-24 sudah turun ke <b>${ddBest.group}</b> hari pertama (${pct(ddBest.rate)}), tapi <b>volumenya masih jalan</b> (≥ $1.000 di jam 20–24). Yang turun lebih dari 90% biasanya sudah mati (${pct(SW.by_drawdown[0].rate)}). Yang masih dekat puncak juga jarang naik 3x lagi. Cara pakainya: daftar pantauan di jam ke-24, lalu tunggu konfirmasi volume dan harga sebelum masuk.`;
+
+  // 7 rugs
+  const tbl=$("#signs");tbl.replaceChildren(h("tr",{},[h("th",{text:"Tanda"}),h("th",{class:"hide-s",text:"Kapan terlihat"}),h("th",{text:"% rug"}),h("th",{class:"hide-s",style:"width:28%",text:""})]));
+  const signsSorted=R.signs.filter(x=>!x.sign.startsWith("Sudah turun")).sort((a,b)=>b.rug_yes.rate-a.rug_yes.rate);
+  for(const x of signsSorted){
+    const m=h("div",{class:"meter"},[h("i",{style:`width:${(x.rug_yes.rate*100).toFixed(1)}%`}),h("u",{style:`left:${(x.rug_no.rate*100).toFixed(1)}%`})]);
+    const tr=h("tr",{},[h("td",{},[h("div",{text:x.sign}),h("div",{class:"note",text:`${pct(x.share,0)} token punya tanda ini · runner ${pct(x.runner_yes.rate)}`})]),
+      h("td",{class:"hide-s"},[h("span",{class:"pill",text:x.when==="t0"?"saat graduation":"setelah harga bergerak"})]),
+      h("td",{class:"num"},[h("b",{text:pct(x.rug_yes.rate,0)}),h("div",{class:"note",text:"vs "+pct(x.rug_no.rate,0)})]),h("td",{class:"hide-s"},[m])]);
+    bindTip(tr,[["tv",pct(x.rug_yes.rate)],["tl",x.sign],["tm",`${num(x.rug_yes.k)} dari ${num(x.rug_yes.n)} token rug`],["tm",`tanpa tanda ini: ${pct(x.rug_no.rate)}`]]);
+    tbl.appendChild(tr);
+  }
+  chart("chRugT",(el,W)=>vbar(el,W,R.timing,{val:x=>x.n,color:()=>css("--s2"),labelAll:true}));
+  table($("#tbRugT"),[["Waktu",r=>r.group],["Token rug",r=>num(r.n),1]],R.timing);
+  $("#subOne").textContent=`Dari ${num(R.n)} rug, berapa yang jatuh dari ≥ 50% puncak ke hampir nol dalam satu candle?`;
+  $("#oneTiles").replaceChildren(
+    h("div",{class:"tile"},[h("div",{class:"v",text:pct(R.one_candle.rate,0)}),h("div",{class:"l",text:"runtuh dalam ≤ 5 menit"}),h("div",{class:"s",text:"tidak sempat keluar kalau cuma memantau tiap 5 menit"})]),
+    h("div",{class:"tile"},[h("div",{class:"v",text:pct(1-R.one_candle.rate,0)}),h("div",{class:"l",text:"turun bertahap"}),h("div",{class:"s",text:"ada jendela untuk keluar"})]));
+  const stopRows=R.stops.map(x=>({group:`Stop ${Math.round(x.stop*100)}%`,...x}));
+  chart("chStop",(el,W)=>{
+    const rows=stopRows.flatMap(x=>[{group:`${x.group} · rug`,...x.rugs_exited_before},{group:`${x.group} · runner`,...x.runners_stopped}]);
+    hbar(el,W,rows,{max:1,what:"",color:r=>r.group.endsWith("runner")?css("--s1"):css("--s2")});
+  });
+  table($("#tbStop"),[["Aturan",r=>r.group],["Rug: keluar duluan",r=>pct(r.rugs_exited_before.rate),1],["Rug: nilai saat keluar",r=>mult(r.rug_exit_median_mult)+" modal",1],["Runner: ikut terjual",r=>pct(r.runners_stopped.rate),1],["Runner: nilai saat terjual",r=>mult(r.runner_exit_median_mult),1],["Runner: puncak median",r=>mult(r.runner_peak_median),1]],stopRows);
+  $("#tkRug").innerHTML=`<b>Artinya</b>Cara paling efektif menghindari rug adalah <b>tidak masuk</b> ke token yang punya tanda bahaya di tabel atas, terutama graduation instan dan lonjakan ekstrem dalam satu candle. Setelah masuk, trailing stop 50% hanya menyelamatkan ±${pct(st50.rugs_exited_before.rate,0)} rug (median keluar di ${mult(st50.rug_exit_median_mult)} modal), tapi juga menjual ${pct(st50.runners_stopped.rate,0)} runner di ±${mult(st50.runner_exit_median_mult)}, padahal puncak median runner ${mult(st50.runner_peak_median)}. Kompromi yang masuk akal: ambil sebagian profit di 2–3x, lalu biarkan sisanya jalan dengan stop yang longgar.`;
+
+  // 8 playbook
+  const steps=[
+    ["Saat token lulus: cek jenis graduation",`Lewati yang <b>kosong</b> (market cap awal < $1.000) dan berhati-hatilah dengan yang <b>instan</b> (${pct(seg.instan?.rug,0)} rug).`],
+    ["Cek alat launch dan metadata",`Metadata dari tool seperti J7 Tracker, Uxento, atau RapidLaunch jarang rug. Token tanpa link X lebih sering rug. Metadata di Irys: ${pct(R.signs.find(x=>x.sign.includes("Irys"))?.rug_yes.rate,0)} rug.`],
+    ["Cek nama terhadap narasi panas",`Kalau namanya menumpang kata yang baru meledak dalam 24 jam terakhir, anggap itu peringatan rug (${pct(hot?.rug_yes.rate,0)}), bukan peluang.`],
+    ["Tunggu 15–60 menit",`Di bawah 0,3x di menit 15 → lupakan (runner ${pct(R.signs.find(x=>x.sign.startsWith("Sudah turun"))?.runner_yes.rate)}). Zona terbaik: 1,5–5x di menit 60. Ada lonjakan ≥ 50x dalam satu candle → keluar atau jangan masuk (${pct(jump?.rug_yes.rate,0)} rug).`],
+    ["Kelola posisi",`Ambil sebagian profit di 2–3x. Trailing stop yang ketat memotong sebagian besar runner terlalu dini.`],
+    ["Jam ke-24: daftar pantauan second wave",`Cari token yang sudah turun 10–75% dari puncak hari pertama tapi volumenya masih ≥ $1.000 per 4 jam. Masuk hanya setelah ada konfirmasi kenaikan.`],
+  ];
+  $("#steps").replaceChildren(...steps.map(([t,d])=>h("li",{},[h("b",{text:t}),h("span",{html:d})])));
+
+  $("#method").innerHTML=[
+    `Data: semua graduation pump.fun → PumpSwap sejak 1 Agustus 2026 dari Solana RPC. Harga dari candle 5 menit GeckoTerminal untuk 72 jam pertama. Sampel acak 30% untuk token sebelum 5 Nov, semua token setelahnya.`,
+    `Label (aturan ${D.rule_version}): <b>runner</b> = puncak ≥ 5x harga graduation dalam 72 jam (runner_other, slow_climb); <b>second wave</b> = turun di bawah 2x lalu naik ≥ 5x dari dasar itu setelah jam ke-24; <b>rug</b> = harga di bawah 0,25% dari puncak berjalan; <b>mati</b> = tanpa transaksi di jam ke-24.`,
+    `Rentang 95% (Wilson) ditampilkan di setiap grafik. Kelompok kecil punya rentang lebar, jadi jangan dibaca berlebihan.`,
+    `Analisis runner tidak menyertakan ${num(O.jumps)} token dengan lonjakan ≥ 50x dalam satu candle (suntikan pool, ${pct(jump?.rug_yes.rate,0)} rug). Mereka tetap dihitung di analisis rug.`,
+    `Metadata (X, Telegram, website, alat launch) dibaca dari URI di akun mint. Cakupan saat ini: ${num(O.meta_coverage)} token, dan masih bertambah.`,
+    `Yang belum ada: data dari X/Twitter itu sendiri (followers, aktivitas), wallet holder per token, dan data launchpad selain pump.fun.`,
+  ].map(x=>`<li>${x}</li>`).join("");
+}).catch(e=>{$("#heroText").textContent="Gagal memuat insights.json: "+e});
+</script>
+</body>
+</html>
