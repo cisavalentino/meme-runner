@@ -147,9 +147,14 @@ def trade_poll_targets(conn: sqlite3.Connection, now: datetime, sample: float = 
     return out
 
 
-def poll_trades(conn: sqlite3.Connection, gecko, now: datetime, sample: float = GECKO_DETAIL_SAMPLE) -> int:
+TRADE_POLLS_PER_LOOP = 3   # keeps one loop short so snapshots stay on time; the rest wait a loop
+
+
+def poll_trades(conn: sqlite3.Connection, gecko, now: datetime, sample: float = GECKO_DETAIL_SAMPLE,
+                limit: int | None = TRADE_POLLS_PER_LOOP) -> int:
     n = 0
-    for t in trade_poll_targets(conn, now, sample):
+    targets = trade_poll_targets(conn, now, sample)
+    for t in targets[:limit] if limit else targets:
         try:
             trades = gecko.trades(t["canonical_pool"], t["mint"])
         except Exception as e:
