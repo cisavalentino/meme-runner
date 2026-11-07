@@ -39,7 +39,8 @@ def store_migrations(conn: sqlite3.Connection, rpc: SolanaRpc, migs: list[Migrat
         return 0
     curves = rpc.accounts([m.bonding_curve for m in migs], encoding="base64")
     mints = rpc.accounts([m.mint for m in migs], encoding="jsonParsed")
-    toks, pools = [], []
+    from .meta import uri_from_account
+    toks, pools, uris = [], [], []
     for m, curve, mint in zip(migs, curves, mints):
         meta = mint_metadata(mint)
         created = rpc.oldest_signature_time(m.bonding_curve) if with_created_at else None
@@ -52,10 +53,17 @@ def store_migrations(conn: sqlite3.Connection, rpc: SolanaRpc, migs: list[Migrat
             "bonding_minutes": (m.graduated_at - created).total_seconds() / 60 if created else None,
             "bonding_curve": m.bonding_curve, "migrate_tx": m.signature, "source": "rpc",
         })
-        pools.append({"pool": m.pool, "mint": m.mint, "dex": "pumpswap", "quote_mint": "So11111111111111111111111111111111111111112",
+        pools.append({"pool": m.pool, "mint": m.mint, "dex": "pumpswap",
+                      "quote_mint": m.quote_mint or "So11111111111111111111111111111111111111112",
+                      "pool_base": m.pool_base, "pool_quote": m.pool_quote,
                       "created_at": m.graduated_at.isoformat(timespec="seconds"), "is_canonical": 1, "source": "rpc"})
+        uris.append((m.mint, uri_from_account(mint)))
     db.upsert(conn, "tokens", toks, key=("mint",))
     db.upsert(conn, "pools", pools, key=("pool",))
+    # metadata uri is in the mint account we already read; the JSON is fetched later
+    conn.executemany("INSERT OR IGNORE INTO token_meta (mint, uri, status, fetched_at) VALUES (?, ?, ?, ?)",
+                     [(m, u, None if u else "no_uri", db.now_iso()) for m, u in uris])
+    conn.commit()
     return len(toks)
 
 

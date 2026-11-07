@@ -152,6 +152,10 @@ def main(argv: list[str] | None = None) -> int:
     ins.add_argument("--out", default="web/meme-research")
     wp = sub.add_parser("runners-page", help="write the runner list (data.json + index.html) for the web")
     wp.add_argument("--out", default="web/meme-research")
+    lt = sub.add_parser("live-test", help="live test of the runner rule: decide at T0+60m, score after 72h")
+    lt.add_argument("--once", action="store_true")
+    lt.add_argument("--every", type=int, default=30, help="seconds between steps")
+    lt.add_argument("--out", default="web/meme-research")
     h = sub.add_parser("health", help="exit 1 if the collector heartbeat is older than --max-age seconds")
     h.add_argument("--max-age", type=int, default=300)
 
@@ -282,6 +286,36 @@ def main(argv: list[str] | None = None) -> int:
         from .http import ApiClient
         from .webpage import write_page
         print(f"wrote {write_page(conn, ApiClient(), a.out)} runners to {a.out}")
+    elif a.cmd == "live-test":
+        import httpx
+        from . import livetest
+        from .http import ApiClient, redact_url
+        _, rpc, _, gecko = clients()
+        api = ApiClient()
+        now = datetime.now(timezone.utc)
+        print(f"reserves backfilled: {livetest.backfill_reserves(conn, rpc, now - timedelta(hours=27))}", flush=True)
+        prices, priced_at = {}, None
+        with httpx.Client(timeout=20, follow_redirects=True, headers={"User-Agent": "runner-research"}) as client:
+            while True:
+                now = datetime.now(timezone.utc)
+                out = {"at": now.isoformat(timespec="seconds")}
+                for name, fn in (("step", lambda: livetest.step(conn, gecko, rpc, client, now)),
+                                 ("scored", lambda: livetest.score(conn, now))):
+                    try:
+                        out[name] = fn()
+                    except Exception as e:
+                        logging.getLogger(__name__).exception("live-test %s", name)
+                        out[name] = redact_url(f"error: {type(e).__name__}: {e}")[:200]
+                if priced_at is None or now - priced_at >= timedelta(minutes=5):
+                    try:
+                        prices, priced_at = livetest.open_prices(conn, api), now
+                    except Exception as e:
+                        out["prices"] = redact_url(f"error: {e}")[:200]
+                out["signals"] = livetest.write(conn, a.out, now, prices)
+                print(json.dumps(out), flush=True)
+                if a.once:
+                    break
+                time.sleep(max(1.0, a.every - (datetime.now(timezone.utc) - now).total_seconds()))
     elif a.cmd == "health":
         hb = db.get_state(conn, "collector_heartbeat")
         age = (datetime.now(timezone.utc) - datetime.fromisoformat(json.loads(hb)["at"])).total_seconds() if hb else None

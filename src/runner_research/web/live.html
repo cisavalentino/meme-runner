@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Test Runner</title>
+<meta name="robots" content="noindex">
+<style>
+:root{color-scheme:light;--page:#f9f9f7;--card:#fff;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--ring:rgba(11,11,11,.10);--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--up:#006300;--down:#d03b3b;--warnink:#7a5200;--warnbg:#fff4dc;--head:#f4f4f1;--hover:#f4f4f1}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){color-scheme:dark;--page:#0d0d0d;--card:#161615;--ink:#f0efec;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--ring:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--s3:#199e70;--up:#0ca30c;--down:#e66767;--warnink:#e0b04a;--warnbg:#2a2210;--head:#1c1c1b;--hover:#1f1f1e}}
+:root[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--card:#161615;--ink:#f0efec;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--ring:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--s3:#199e70;--up:#0ca30c;--down:#e66767;--warnink:#e0b04a;--warnbg:#2a2210;--head:#1c1c1b;--hover:#1f1f1e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--s1);text-decoration:none}a:hover{text-decoration:underline}
+.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--page) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--ring)}
+.top .in{max-width:1400px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{font-weight:700}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs a{padding:6px 12px;border-radius:999px;color:var(--ink2);font-size:14px}
+.tabs a.on{background:var(--ink);color:var(--page)}
+.tabs a:hover{text-decoration:none;background:var(--ring)}.tabs a.on:hover{background:var(--ink)}
+.stamp{margin-left:auto;color:var(--muted);font-size:12.5px}
+main{max-width:1400px;margin:0 auto;padding:0 16px 48px}
+header{padding:28px 0 4px}
+h1{font-size:clamp(22px,3vw,30px);margin:0 0 6px;letter-spacing:-.02em}
+h2{font-size:18px;margin:32px 0 4px;letter-spacing:-.01em}
+.sub{color:var(--ink2);max-width:820px;margin:0}
+.hint{color:var(--muted);font-size:12.5px;margin:0 0 10px;max-width:820px}
+.rule{background:var(--card);border:1px solid var(--ring);border-radius:12px;padding:14px 16px;margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px 24px}
+.rule .st{display:flex;gap:10px}
+.rule .n{flex:none;width:24px;height:24px;border-radius:999px;background:var(--ink);color:var(--page);display:grid;place-items:center;font-size:12px;font-weight:700}
+.rule ul{margin:2px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
+.rule b.h{display:block}
+.tiles{margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.tile{background:var(--card);border:1px solid var(--ring);border-radius:12px;padding:12px 14px}
+.tile .v{font-size:24px;font-weight:700;letter-spacing:-.02em}
+.tile .l{color:var(--ink2);font-size:12.5px}
+.tile .c{color:var(--muted);font-size:12px;margin-top:2px}
+.scroll{overflow:auto;border:1px solid var(--ring);border-radius:12px;background:var(--card)}
+table{border-collapse:separate;border-spacing:0;font-size:12.5px;width:max-content;min-width:100%}
+th,td{padding:8px 10px;border-bottom:1px solid var(--grid);white-space:nowrap;text-align:left;vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+th{position:sticky;top:0;background:var(--head);font-weight:600;color:var(--muted);font-size:11.5px;letter-spacing:.02em}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.wrap{white-space:normal;min-width:200px;max-width:320px}
+tbody tr:hover td{background:var(--hover)}
+a.tok{color:var(--ink);font-weight:600}a.tok:hover{color:var(--s1)}
+.sym{color:var(--muted);font-size:11.5px;margin-left:4px}
+.up{color:var(--up)}.down{color:var(--down)}
+.warn{display:inline-block;background:var(--warnbg);color:var(--warnink);border-radius:6px;padding:1px 7px;font-size:11.5px;margin:0 4px 3px 0}
+.lbl{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11.5px;border:1px solid var(--ring)}
+.lbl i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;background:var(--muted)}
+.lbl.runner_other i{background:var(--s1)}.lbl.slow_climb i{background:var(--s3)}.lbl.second_wave i{background:var(--s2)}.lbl.rug i{background:var(--down)}
+.st-wait{color:var(--muted)}
+.bars{background:var(--card);border:1px solid var(--ring);border-radius:12px;padding:12px 16px}
+.br{display:grid;grid-template-columns:minmax(120px,240px) 1fr 48px;gap:10px;align-items:center;padding:4px 0;font-size:13px}
+.br .t{height:8px;border-radius:0 4px 4px 0;background:var(--s1);min-width:2px}
+.br .k{text-align:right;color:var(--ink2);font-variant-numeric:tabular-nums}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:0 24px}
+details.def{margin-top:28px;color:var(--ink2);font-size:13px;max-width:900px}
+details.def summary{cursor:pointer;color:var(--ink)}
+details.def p{margin:6px 0}
+</style>
+</head>
+<body>
+<div class="top"><div class="in">
+  <span class="brand">Meme Runner Research</span>
+  <nav class="tabs"><a href="./">Insight</a><a href="runners.html">Daftar runner</a><a class="on" href="live.html">Live test</a></nav>
+  <span class="stamp" id="gen">memuat…</span>
+</div></div>
+<main>
+<header>
+  <h1>Live test aturan pencari runner</h1>
+  <p class="sub">Setiap token yang baru graduate dicek otomatis dengan aturan di bawah. Yang lolos sampai menit ke-60 dicatat sebagai <b>sinyal</b> (harga masuk = harga di menit 60), lalu dinilai setelah 72 jam. Ini <b>paper trading</b>: tidak ada transaksi sungguhan.</p>
+</header>
+<div class="rule" id="rule"></div>
+<div class="tiles" id="tiles"></div>
+
+<h2>Sinyal</h2>
+<p class="hint">Terbaru di atas. "Sekarang" = harga DexScreener terkini dibanding harga masuk (diperbarui tiap 5 menit). "Maks 72j" dan "rencana" diisi setelah 72 jam dari candle 5 menit. Rencana = jual ½ di 2x, ½ di 5x, stop-loss 0,6x lalu pindah ke harga masuk.</p>
+<div class="scroll"><table id="sig"></table></div>
+
+<div class="cols">
+<div>
+<h2>Sedang dipantau</h2>
+<p class="hint">Belum gagal satu pun cek, menunggu harga menit 15 / 60.</p>
+<div class="scroll"><table id="watch"></table></div>
+</div>
+<div>
+<h2>Alasan ditolak, 24 jam terakhir</h2>
+<p class="hint" id="rejn"></p>
+<div class="bars" id="reasons"></div>
+</div>
+</div>
+
+<h2>Nyaris lolos</h2>
+<p class="hint">Token yang hanya gagal satu cek harga (bukan karena graduation kosong/instan). Berguna untuk melihat apakah batasnya terlalu ketat.</p>
+<div class="scroll"><table id="near"></table></div>
+
+<h2>Runner yang terlewat</h2>
+<p class="hint" id="missn"></p>
+<div class="scroll"><table id="miss"></table></div>
+
+<details class="def">
+  <summary>Cara kerja dan batasan</summary>
+  <p><b>Harga graduation</b> diambil dari isi pool saat dibuat (transaksi migrasi), bukan dari candle pertama, jadi tidak bergeser kalau GeckoTerminal terlambat mencatat candle. Kelipatan 15m/60m dihitung dalam token quote (biasanya SOL), jadi pergerakan harga SOL tidak ikut terhitung.</p>
+  <p><b>Narasi panas</b>: kata di nama/simbol yang dalam 24 jam terakhir dipakai token lain yang sudah ≥ 3x di menit 60-nya. Hari pertama live test daftar ini belum lengkap.</p>
+  <p><b>Tanpa link X</b> tidak lagi menolak token (aturan r2), hanya diberi peringatan. Di backtest Oktober, sinyal tanpa X: 12,5% runner (n=32) vs 23% yang punya X.</p>
+  <p><b>Penilaian</b>: label runner (slow_climb / runner_other) diambil dari pipeline harian setelah jendela 72 jam ditutup. Hasil rencana belum termasuk fee dan slippage. Di backtest, tidak ada rencana keluar yang rata-rata untung, jadi live test ini untuk menguji apakah sinyalnya bertahan, bukan bukti profit.</p>
+</details>
+</main>
+<script>
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pct=v=>v==null?"–":(v*100).toFixed(1).replace(".",",")+"%";
+const x=v=>v==null?"–":(v>=10?v.toFixed(0):v.toFixed(2).replace(".",","))+"x";
+const usd=v=>v==null?"–":v>=1e6?"$"+(v/1e6).toFixed(2).replace(".",",")+" jt":v>=1e3?"$"+Math.round(v/1e3)+" rb":"$"+Math.round(v);
+const wib=s=>s?new Date(s).toLocaleString("id-ID",{timeZone:"Asia/Jakarta",day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}).replace(/\./g,":"):"";
+const ago=s=>{const m=Math.round((Date.now()-new Date(s))/60000);return m<60?m+" mnt":Math.floor(m/60)+" j "+(m%60)+" mnt"};
+const tok=r=>`<a class="tok" href="https://gmgn.ai/sol/token/${esc(r.mint)}" target="_blank" rel="noopener" title="Buka di GMGN">${esc(r.name||r.mint.slice(0,6))}</a><span class="sym">${esc(r.symbol||"")}</span>`;
+const warns=ws=>(ws||[]).map(w=>`<span class="warn">⚠ ${esc(w)}</span>`).join("");
+const lbl=l=>l?`<span class="lbl ${esc(l)}"><i></i>${esc(l)}</span>`:`<span class="st-wait">belum</span>`;
+const cls=v=>v==null?"":v>=1?"up":"down";
+function table(id,head,rows,empty){
+  const el=document.getElementById(id);
+  el.innerHTML=`<thead><tr>${head.map(h=>`<th class="${h[1]||""}" scope="col">${h[0]}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody>`;
+  if(!rows.length)el.querySelector("tbody").innerHTML=`<tr><td colspan="${head.length}"><div class="empty">${empty}</div></td></tr>`;
+}
+function rule(r){
+  const f=n=>String(n).replace(".",",");
+  return [
+    ["Saat graduate, lewati jika",[`market cap graduation &lt; $${(r.min_grad_mcap).toLocaleString("id-ID")} (kosong)`,r.skip_instant?"dibuat &amp; graduate di detik yang sama (instan)":null,`metadata di ${r.skip_tools.join(", ")}`,r.skip_hot_copy?"nama meniru narasi panas 24 jam terakhir":null,r.require_x?"tidak ada link X":null].filter(Boolean)],
+    ["Menit 15",[`harga ≥ ${f(r.min_m15)}x harga graduation`]],
+    ["Menit 60 → sinyal",[`harga ${f(r.min_m60)}–${f(r.max_m60)}x harga graduation`,`tidak ada candle 5 menit yang naik ≥ ${r.max_jump}x`,r.require_x?null:"tanpa link X = peringatan, bukan ditolak"].filter(Boolean)],
+  ].map((s,i)=>`<div class="st"><span class="n">${i+1}</span><div><b class="h">${s[0]}</b><ul>${s[1].map(li=>`<li>${li}</li>`).join("")}</ul></div></div>`).join("");
+}
+function render(d){
+  const S=d.summary,B=d.backtest;
+  document.getElementById("gen").textContent="diperbarui "+wib(d.generated_utc)+" WIB · mulai "+wib(d.since);
+  document.getElementById("rule").innerHTML=rule(d.rule);
+  const tiles=[
+    [S.signals,"sinyal",`${S.per_day==null?"–":String(S.per_day).replace(".",",")}/hari · backtest ${String(B.per_day).replace(".",",")}/hari`],
+    [S.watching,"sedang dipantau",`${S.evaluated} token sudah dicek`],
+    [pct(S.runner_label),"sinyal jadi runner",`dari ${S.labeled} berlabel · backtest ${pct(B.runner_label)} (semua token ${pct(B.base_runner)})`],
+    [pct(S.hit2),"naik ≥ 2x dari harga masuk",`dari ${S.scored} dinilai · backtest ${pct(B.hit2)}`],
+    [pct(S.rug_after),"rug setelah masuk",`backtest ${pct(B.rug_after)}`],
+    [S.plan_mean==null?"–":x(S.plan_mean),"hasil rata-rata rencana",`per 1x modal · backtest ${x(B.plan_mean)}`],
+  ];
+  document.getElementById("tiles").innerHTML=tiles.map(t=>`<div class="tile"><div class="v">${t[0]}</div><div class="l">${t[1]}</div><div class="c">${t[2]}</div></div>`).join("");
+  table("sig",[["Waktu (WIB)"],["Token"],["MC graduation","num"],["15m","num"],["60m","num"],["MC masuk","num"],["Sekarang","num"],["Maks 72j","num"],["Rencana","num"],["Label"],["Peringatan"]],
+    d.signals.map(r=>`<tr><td>${wib(r.t0)}</td><td>${tok(r)}</td><td class="num">${usd(r.grad_mcap)}</td><td class="num">${x(r.m15)}</td><td class="num">${x(r.m60)}</td><td class="num">${usd(r.entry_mcap)}</td><td class="num ${cls(r.now_mult)}">${r.status==="scored"?"–":x(r.now_mult)}</td><td class="num">${r.max_mult==null?`<span class="st-wait">${ago(r.t0)}</span>`:x(r.max_mult)}</td><td class="num ${cls(r.plan)}">${x(r.plan)}</td><td>${lbl(r.label)}</td><td class="wrap">${warns(r.warnings)}</td></tr>`),
+    "Belum ada sinyal. Rata-rata sekitar 5 sinyal per hari, jadi tunggu beberapa jam.");
+  table("watch",[["Waktu (WIB)"],["Token"],["Umur","num"],["MC graduation","num"],["15m","num"],["Peringatan"]],
+    d.watching.map(r=>`<tr><td>${wib(r.t0)}</td><td>${tok(r)}</td><td class="num">${ago(r.t0)}</td><td class="num">${usd(r.grad_mcap)}</td><td class="num">${x(r.m15)}</td><td class="wrap">${warns(r.warnings)}</td></tr>`),
+    "Tidak ada token yang sedang dipantau.");
+  const mx=Math.max(1,...d.reasons_24h.map(r=>r[1]));
+  document.getElementById("rejn").textContent=`${d.rejected_24h} token ditolak. Satu token bisa gagal beberapa cek sekaligus.`;
+  document.getElementById("reasons").innerHTML=d.reasons_24h.length?d.reasons_24h.map(([k,n])=>`<div class="br" title="${esc(k)}: ${n}"><span>${esc(k)}</span><div class="t" style="width:${(n/mx*100).toFixed(1)}%"></div><span class="k">${n}</span></div>`).join(""):`<div class="empty">Belum ada.</div>`;
+  table("near",[["Waktu (WIB)"],["Token"],["MC graduation","num"],["15m","num"],["60m","num"],["Gagal di"],["Label"]],
+    d.near_misses.map(r=>`<tr><td>${wib(r.t0)}</td><td>${tok(r)}</td><td class="num">${usd(r.grad_mcap)}</td><td class="num">${x(r.m15)}</td><td class="num">${x(r.m60)}</td><td>${esc(r.reasons[0])}</td><td>${lbl(r.label)}</td></tr>`),
+    "Belum ada.");
+  document.getElementById("missn").textContent=S.rejected_labeled?`Dari ${S.rejected_labeled} token ditolak yang sudah berlabel, ${pct(S.rejected_runner)} jadi runner (sinyal: ${pct(S.runner_label)}). Label muncul setelah 72 jam.`:"Label muncul setelah 72 jam, jadi bagian ini baru terisi 3 hari setelah live test mulai.";
+  table("miss",[["Waktu (WIB)"],["Token"],["Label"],["Ditolak karena"]],
+    S.rejected_runners.map(r=>`<tr><td>${wib(r.t0)}</td><td>${tok(r)}</td><td>${lbl(r.label)}</td><td class="wrap">${esc(r.reasons.join(", "))}</td></tr>`),
+    "Belum ada.");
+}
+async function load(){
+  try{const r=await fetch("live.json?"+Date.now());render(await r.json())}
+  catch(e){document.getElementById("gen").textContent="gagal memuat data"}
+}
+load();setInterval(load,60000);
+</script>
+</body>
+</html>

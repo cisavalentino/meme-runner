@@ -43,6 +43,10 @@ class Rule:
 
 
 R1 = Rule()
+# r2: a missing X link is a warning, not a rejection (runners like scamsem, 7 Nov,
+# had only a pump.fun community link).
+R2 = Rule(version="r2", require_x=False)
+LIVE_RULE = R2
 
 
 def evaluate(f: dict, rule: Rule = R1) -> tuple[bool, list[str]]:
@@ -67,6 +71,18 @@ def evaluate(f: dict, rule: Rule = R1) -> tuple[bool, list[str]]:
     if jump is not None and jump >= rule.max_jump:
         why.append(f"lonjakan {jump:.0f}x dalam 1 candle")
     return (not why, why)
+
+
+def warnings(f: dict) -> list[str]:
+    """Things that do not reject a token but lower its odds (see insights)."""
+    w = []
+    if f.get("x_kind") in (None, "none", "other"):
+        w.append("tanpa link X" + (" (hanya komunitas pump.fun)" if f.get("community") else ""))
+    if f.get("grad_source") == "candle":
+        w.append("harga graduation dari candle pertama")
+    if f.get("bonding_minutes") is None:
+        w.append("lama bonding tidak diketahui")
+    return w
 
 
 def first_hour(t0: datetime, rows: list[tuple]) -> dict:

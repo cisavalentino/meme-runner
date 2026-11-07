@@ -44,6 +44,24 @@ class Migration:
     pool: str
     bonding_curve: str
     graduated_at: datetime
+    quote_mint: str | None = None       # what the PumpSwap pool is paired with (usually WSOL)
+    pool_base: float | None = None      # pool reserves right after CreatePool: the first price
+    pool_quote: float | None = None     # is pool_quote / pool_base (in quote units)
+
+
+def pool_reserves(tx: dict, pool: str, mint: str) -> tuple[str | None, float | None, float | None]:
+    """(quote mint, base amount, quote amount) held by the pool after the tx."""
+    base = quote = qmint = None
+    for b in (tx.get("meta") or {}).get("postTokenBalances") or []:
+        if b.get("owner") != pool:
+            continue
+        amt = (b.get("uiTokenAmount") or {}).get("uiAmountString")
+        amt = float(amt) if amt not in (None, "") else None
+        if b.get("mint") == mint:
+            base = amt
+        elif qmint is None:
+            qmint, quote = b.get("mint"), amt
+    return qmint, base, quote
 
 
 def parse_migration(tx: dict, signature: str | None = None) -> Migration | None:
@@ -60,10 +78,12 @@ def parse_migration(tx: dict, signature: str | None = None) -> Migration | None:
     for ix in tx["transaction"]["message"]["instructions"]:
         acc = ix.get("accounts") or []
         if ix.get("programId") == PUMP_PROGRAM and len(acc) > _IX_POOL and PUMPSWAP_PROGRAM in acc:
+            qmint, base, quote = pool_reserves(tx, acc[_IX_POOL], acc[_IX_MINT])
             return Migration(
                 signature=signature or tx["transaction"]["signatures"][0],
                 mint=acc[_IX_MINT], pool=acc[_IX_POOL], bonding_curve=acc[_IX_BONDING_CURVE],
-                graduated_at=datetime.fromtimestamp(tx["blockTime"], timezone.utc))
+                graduated_at=datetime.fromtimestamp(tx["blockTime"], timezone.utc),
+                quote_mint=qmint, pool_base=base, pool_quote=quote)
     return None
 
 

@@ -154,7 +154,34 @@ CREATE TABLE IF NOT EXISTS token_meta (
     image       TEXT,
     fetched_at  TEXT
 );
+
+-- Live test of the runner-search rule (strategy.py): one row per graduation,
+-- decided at T0+60m, scored once its 72h candles are in.
+CREATE TABLE IF NOT EXISTS live_signals (
+    mint        TEXT NOT NULL,
+    rule        TEXT NOT NULL,
+    t0          TEXT NOT NULL,
+    status      TEXT NOT NULL,       -- pending | signal | rejected | scored
+    reasons     TEXT,                -- JSON list: why it failed
+    warnings    TEXT,                -- JSON list: passed, but worth a look
+    features    TEXT,                -- JSON: everything the rule saw
+    entry_price REAL,                -- DexScreener price at T0+60m (USD)
+    entry_at    TEXT,
+    outcome     TEXT,                -- JSON: strategy.outcome() after 72h
+    label       TEXT,
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (mint, rule)
+);
+CREATE INDEX IF NOT EXISTS ix_live_t0 ON live_signals(t0);
 """
+
+# Columns added after the first release: (table, column, type). connect() adds missing ones.
+ADDED_COLUMNS = [
+    ("pools", "pool_base", "REAL"),          # reserves right after CreatePool (migration tx)
+    ("pools", "pool_quote", "REAL"),
+    ("snapshots", "price_native", "REAL"),   # price in the quote token (priceUsd / priceNative = quote USD)
+    ("token_meta", "community", "TEXT"),     # pump.fun coin_community link
+]
 
 
 def now_iso() -> str:
@@ -183,6 +210,14 @@ def connect(path: str | os.PathLike | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(path, timeout=60)  # collector and backfill may write concurrently
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    for table, col, typ in ADDED_COLUMNS:
+        if col not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+            except sqlite3.OperationalError as e:      # another process added it first
+                if "duplicate column" not in str(e):
+                    raise
+    conn.commit()
     return conn
 
 

@@ -57,7 +57,8 @@ def twitter_kind(url: str | None) -> str:
 def parse_meta(js: dict) -> dict:
     s = lambda k: (str(js.get(k)).strip() or None) if js.get(k) not in (None, "") else None
     return {"description": (s("description") or "")[:1000] or None, "twitter": s("twitter"),
-            "telegram": s("telegram"), "website": s("website"), "image": s("image")}
+            "telegram": s("telegram"), "website": s("website"), "image": s("image"),
+            "community": s("coin_community")}
 
 
 def fetch_uris(conn: sqlite3.Connection, rpc, mints: list[str]) -> int:
@@ -72,7 +73,7 @@ def fetch_uris(conn: sqlite3.Connection, rpc, mints: list[str]) -> int:
     return len(mints)
 
 
-FIELDS = ("status", "description", "twitter", "telegram", "website", "image")
+FIELDS = ("status", "description", "twitter", "telegram", "website", "image", "community")
 
 
 def _get(client: httpx.Client, mint: str, uri: str) -> dict:

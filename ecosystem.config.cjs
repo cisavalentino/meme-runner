@@ -29,6 +29,9 @@ module.exports = { apps: [
   // Caddy proxies /meme-research/* on the public domain to this port.
   { name: 'rr-web', cwd: __dirname, script: '.venv/bin/python', interpreter: 'none', time: true,
     args: ['-m', 'http.server', '8795', '--bind', '127.0.0.1', '--directory', 'web'], autorestart: true },
+  // Live test of the runner rule (strategy.LIVE_RULE): decides each graduation at T0+60m,
+  // scores signals after 72h, writes web/meme-research/live.json every 30 s.
+  rr('rr-live', 'live-test', { autorestart: true, restart_delay: 30000 }),
   // Runner table (live DexScreener) + insights.json, every 15 min.
   { name: 'rr-runners', cwd: __dirname, script: 'bash', interpreter: 'none', time: true,
     args: ['-c', '.venv/bin/rr runners-page && .venv/bin/rr insights'],

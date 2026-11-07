@@ -20,6 +20,8 @@ def test_parse_migration():
     m = solana.parse_migration(load("rpc_migrate_tx.json"))
     assert (m.mint, m.pool, m.bonding_curve) == (MINT, POOL, CURVE)
     assert m.graduated_at == datetime(2026, 11, 5, 5, 13, 41, tzinfo=timezone.utc)
+    # first pool price comes from the reserves after CreatePool
+    assert m.quote_mint == solana.WSOL and m.pool_base == 206_900_000 and abs(m.pool_quote - 67.405855429) < 1e-9
 
 
 def test_non_migration_and_failed_tx_are_ignored():

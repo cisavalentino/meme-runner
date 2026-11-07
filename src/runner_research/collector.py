@@ -80,7 +80,7 @@ def take_snapshots(conn: sqlite3.Connection, dexs, gecko, now: datetime,
         if snap is None:
             continue  # not listed yet; retried until GIVE_UP_AFTER
         snap.pop("_canon", None)
-        row = {"mint": d.mint, "offset": d.offset, "price": None, "liquidity": None, "mcap": None,
+        row = {"mint": d.mint, "offset": d.offset, "price": None, "price_native": None, "liquidity": None, "mcap": None,
                "volume_usd": None, "txns": None, "holders": None, "top10_pct": None, "dev_pct": None,
                "mint_auth": None, "freeze_auth": None, "dexs_profile": None, "dexs_boosts": None,
                **snap, "target_at": d.target_at.isoformat(timespec="seconds"),
