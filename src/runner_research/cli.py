@@ -306,6 +306,13 @@ def main(argv: list[str] | None = None) -> int:
         tg = telegram.from_env()
         print(f"telegram alerts: {'on, ' + str(len(tg.chat_ids)) + ' chat(s)' if tg else 'off (no TELEGRAM_BOT_TOKEN/CHAT_ID)'}",
               flush=True)
+        from . import bot
+        if tg:
+            try:
+                bot.register(tg)
+                print(f"telegram commands: {', '.join('/' + c for c, _ in bot.COMMANDS)}", flush=True)
+            except Exception as e:
+                print(redact_url(f"telegram commands not registered: {e}")[:200], flush=True)
         with httpx.Client(timeout=20, follow_redirects=True, headers={"User-Agent": "runner-research"}) as client:
             while True:
                 now = datetime.now(timezone.utc)
@@ -327,7 +334,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(out), flush=True)
                 if a.once:
                     break
-                time.sleep(max(1.0, a.every - (datetime.now(timezone.utc) - now).total_seconds()))
+                wait = max(1.0, a.every - (datetime.now(timezone.utc) - now).total_seconds())
+                if tg:
+                    bot.poll(conn, tg, wait, prices)            # answers commands while waiting
+                else:
+                    time.sleep(wait)
     elif a.cmd == "repair-pools":
         from .ingest import repair_pools
         _, rpc, _, _ = clients()
