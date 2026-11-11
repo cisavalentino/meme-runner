@@ -12,7 +12,7 @@ import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
 
-from . import db, livetest
+from . import db, early, livetest
 from .alerts import PAGE, age, mx, usd
 from .telegram import Telegram, e
 
@@ -22,7 +22,7 @@ WIB = timezone(timedelta(hours=7))
 
 COMMANDS = [
     ("status", "Ringkasan live test: sinyal, pending, hasil"),
-    ("sinyal", "Sinyal aktif + kelipatan harga sekarang"),
+    ("sinyal", "Sinyal aktif (r2 & awal e1) + harga sekarang"),
     ("hasil", "Hasil 72 jam sinyal terakhir"),
     ("cek", "Status satu token: /cek <mint>"),
     ("help", "Daftar command"),
@@ -36,8 +36,8 @@ def register(tg: Telegram) -> None:
     tg._call("setMyCommands", json={"commands": [{"command": c, "description": d} for c, d in COMMANDS]})
 
 
-def _rows(conn, sql: str, *args):
-    return conn.execute(sql, (livetest.RULE.version, *args)).fetchall()
+def _rows(conn, sql: str, *args, rule: str | None = None):
+    return conn.execute(sql, (rule or livetest.RULE.version, *args)).fetchall()
 
 
 SIG, OPEN, PENDING = "status IN ('signal', 'scored')", "status = 'signal'", "status = 'pending'"
@@ -63,27 +63,40 @@ def cmd_status(conn: sqlite3.Connection, now: datetime, prices: dict) -> str:
                      f"rencana rata-rata {mx(sum(o.get('plan') or 0 for o in scored) / n)}")
     lines.append(f"Backtest {e(bt['period'])}: {bt['hit2'] * 100:.0f}% ≥2x · {bt['hit5'] * 100:.0f}% ≥5x · "
                  f"{bt['per_day']} sinyal/hari")
+    ecnt = lambda where, *a: _rows(conn, f"SELECT COUNT(*) FROM live_signals WHERE rule = ? AND {where}", *a, rule=early.RULE)[0][0]
+    eo = [json.loads(r[0] or "{}") for r in _rows(conn, "SELECT outcome FROM live_signals WHERE rule = ? AND status = 'scored'",
+                                                  rule=early.RULE)]
+    eo = [o for o in eo if o.get("max_mult") is not None]
+    lines += ["", f"⚡ <b>Sinyal awal {early.RULE}</b> (menit 1, holder & pro trader)",
+              f"24 jam: {ecnt('t0 >= ?', since)} dicek · {ecnt(SIG + ' AND t0 >= ?', since)} sinyal · "
+              f"total {ecnt(SIG)} sinyal · {len(eo)} sudah dinilai"]
+    if eo:
+        lines.append(f"Hasil: {sum(o['max_mult'] >= 2 for o in eo) / len(eo) * 100:.0f}% ≥2x · "
+                     f"rencana rata-rata {mx(sum(o.get('plan') or 0 for o in eo) / len(eo))}")
     lines.append(f'<a href="{e(PAGE)}">Halaman live test</a>')
     return "\n".join(lines)
 
 
 def cmd_sinyal(conn: sqlite3.Connection, now: datetime, prices: dict) -> str:
-    rows = _rows(conn, """SELECT l.mint, l.t0, l.entry_price, t.symbol FROM live_signals l JOIN tokens t USING (mint)
-                          WHERE l.rule = ? AND l.status = 'signal' ORDER BY l.t0 DESC LIMIT 15""")
+    rows = conn.execute("""SELECT l.mint, l.t0, l.entry_price, l.rule, t.symbol FROM live_signals l JOIN tokens t USING (mint)
+                           WHERE l.rule IN (?, ?) AND l.status = 'signal' ORDER BY l.t0 DESC LIMIT 20""",
+                        (livetest.RULE.version, early.RULE)).fetchall()
     if not rows:
         return "Belum ada sinyal aktif (sinyal < 72 jam)."
     lines = ["🟢 <b>SINYAL AKTIF</b> (harga vs masuk)"]
     for r in rows:
         p = prices.get(r["mint"])
         m = p / r["entry_price"] if p and r["entry_price"] else None
-        lines.append(f"• <b>${e(r['symbol'])}</b> · {age(datetime.fromisoformat(r['t0']), now)} · {mx(m)}\n"
+        lines.append(f"• {'⚡' if r['rule'] == early.RULE else '🟢'} <b>${e(r['symbol'])}</b> · "
+                     f"{age(datetime.fromisoformat(r['t0']), now)} · {mx(m)}\n"
                      f"  <code>{e(r['mint'])}</code>")
     return "\n".join(lines)
 
 
 def cmd_hasil(conn: sqlite3.Connection, now: datetime, prices: dict) -> str:
-    rows = _rows(conn, """SELECT l.outcome, l.label, t.symbol FROM live_signals l JOIN tokens t USING (mint)
-                          WHERE l.rule = ? AND l.status = 'scored' ORDER BY l.t0 DESC LIMIT 15""")
+    rows = conn.execute("""SELECT l.outcome, l.label, l.rule, t.symbol FROM live_signals l JOIN tokens t USING (mint)
+                           WHERE l.rule IN (?, ?) AND l.status = 'scored' ORDER BY l.t0 DESC LIMIT 15""",
+                        (livetest.RULE.version, early.RULE)).fetchall()
     if not rows:
         return "Belum ada sinyal yang selesai 72 jam."
     lines = ["🏁 <b>HASIL 72 JAM</b> (maks · akhir · rencana)"]
@@ -92,7 +105,7 @@ def cmd_hasil(conn: sqlite3.Connection, now: datetime, prices: dict) -> str:
         if o.get("max_mult") is None:
             lines.append(f"• ${e(r['symbol'])}: candle tidak tersedia")
             continue
-        lines.append(f"• <b>${e(r['symbol'])}</b> {mx(o['max_mult'])} · {mx(o.get('last'))} · {mx(o.get('plan'))}"
+        lines.append(f"• {e(r['rule'])} <b>${e(r['symbol'])}</b> {mx(o['max_mult'])} · {mx(o.get('last'))} · {mx(o.get('plan'))}"
                      + (" · ☠️" if o.get("rugged") else "") + (f" · {e(r['label'])}" if r["label"] else ""))
     return "\n".join(lines)
 
@@ -107,7 +120,8 @@ def cmd_cek(conn: sqlite3.Connection, now: datetime, prices: dict, arg: str = ""
     r = conn.execute("SELECT * FROM live_signals WHERE mint = ? AND rule = ?", (mint, livetest.RULE.version)).fetchone()
     head = f"<b>{e(tok['name'])}</b> (${e(tok['symbol'])}) · graduate {age(datetime.fromisoformat(tok['graduated_at']), now)} lalu"
     if r is None:
-        return head + "\nBelum dinilai live test (graduate sebelum live test mulai, atau belum diproses)."
+        return "\n".join([head + "\nr2: belum dinilai (graduate sebelum live test mulai, atau belum diproses)."]
+                         + _cek_early(conn, mint))
     f = json.loads(r["features"] or "{}")
     status = {"signal": "🟢 SINYAL", "scored": "🏁 sinyal, sudah dinilai", "rejected": "❌ ditolak",
               "pending": "⏳ menunggu data"}.get(r["status"], r["status"])
@@ -125,7 +139,23 @@ def cmd_cek(conn: sqlite3.Connection, now: datetime, prices: dict, arg: str = ""
         lines.append(f"72 jam: maks {mx(o['max_mult'])} · akhir {mx(o.get('last'))} · rencana {mx(o.get('plan'))}")
     if r["label"]:
         lines.append(f"Label: {e(r['label'])}")
-    return "\n".join(lines)
+    return "\n".join(lines + _cek_early(conn, mint))
+
+
+def _cek_early(conn, mint: str) -> list[str]:
+    r = conn.execute("SELECT * FROM live_signals WHERE mint = ? AND rule = ?", (mint, early.RULE)).fetchone()
+    if r is None:
+        return []
+    f = json.loads(r["features"] or "{}")
+    st = "⚡ SINYAL" if r["status"] in ("signal", "scored") else "❌ ditolak"
+    parts = [f"{k} {f[k]:.0f}%" if isinstance(f.get(k), float) else None for k in ("top10", "dev", "cluster")]
+    out = ["", f"<b>{early.RULE}</b> (menit 1): {st}",
+           f"holder {f.get('holders', '–')} · pro {f['pro'] * 100:.0f}%" if f.get("pro") is not None
+           else f"holder {f.get('holders', '–')}"]
+    if any(parts):
+        out.append(" · ".join(p for p in parts if p))
+    out += [f"✖️ {e(w)}" for w in json.loads(r["reasons"] or "[]")]
+    return out
 
 
 def cmd_help(conn, now, prices) -> str:

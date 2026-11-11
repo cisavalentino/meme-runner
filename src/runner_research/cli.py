@@ -154,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
     wp.add_argument("--out", default="web/meme-research")
     lt = sub.add_parser("live-test", help="live test of the runner rule: decide at T0+60m, score after 72h")
     lt.add_argument("--once", action="store_true")
-    lt.add_argument("--every", type=int, default=30, help="seconds between steps")
+    lt.add_argument("--every", type=int, default=15, help="seconds between steps (e1 checks at T0+60s)")
     lt.add_argument("--out", default="web/meme-research")
     rp = sub.add_parser("repair-pools", help="re-read migration txs: fix wrong canonical pools, store reserves")
     rp.add_argument("--recent-days", type=float, default=4, help="also every token of the last N days")
@@ -294,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"wrote {write_page(conn, ApiClient(), a.out)} runners to {a.out}")
     elif a.cmd == "live-test":
         import httpx
-        from . import livetest
+        from . import early, livetest
         from .http import ApiClient, redact_url
         _, rpc, _, gecko = clients()
         api = ApiClient()
@@ -317,7 +317,10 @@ def main(argv: list[str] | None = None) -> int:
             while True:
                 now = datetime.now(timezone.utc)
                 out = {"at": now.isoformat(timespec="seconds")}
-                for name, fn in (("step", lambda: livetest.step(conn, gecko, rpc, client, now)),
+                for name, fn in (("early", lambda: early.step(conn, rpc, now)),
+                                 ("early_scored", lambda: early.score(conn, now)),
+                                 ("early_alerts", lambda: early.send_alerts(conn, tg, client, rpc, now) if tg else None),
+                                 ("step", lambda: livetest.step(conn, gecko, rpc, client, now)),
                                  ("scored", lambda: livetest.score(conn, now)),
                                  ("alerts", lambda: send_alerts(conn, tg, api, gecko, client, now) if tg else None)):
                     try:
