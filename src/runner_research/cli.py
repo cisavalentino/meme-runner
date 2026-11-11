@@ -156,6 +156,9 @@ def main(argv: list[str] | None = None) -> int:
     lt.add_argument("--once", action="store_true")
     lt.add_argument("--every", type=int, default=15, help="seconds between steps (e1 checks at T0+60s)")
     lt.add_argument("--out", default="web/meme-research")
+    tr = sub.add_parser("trend", help="trend signals: w1 revival of old graduates, n1 narrative leader")
+    tr.add_argument("--once", action="store_true")
+    tr.add_argument("--every", type=int, default=120, help="seconds between revival checks")
     rp = sub.add_parser("repair-pools", help="re-read migration txs: fix wrong canonical pools, store reserves")
     rp.add_argument("--recent-days", type=float, default=4, help="also every token of the last N days")
     sub.add_parser("telegram-chats", help="chats that messaged the bot (to find TELEGRAM_CHAT_ID)")
@@ -342,6 +345,34 @@ def main(argv: list[str] | None = None) -> int:
                     bot.poll(conn, tg, wait, prices)            # answers commands while waiting
                 else:
                     time.sleep(wait)
+    elif a.cmd == "trend":
+        import httpx
+        from . import telegram, trend
+        from .http import ApiClient, redact_url
+        _, rpc, _, gecko = clients()
+        api, tg = ApiClient(), telegram.from_env()
+        last_narr = None
+        with httpx.Client(timeout=20, follow_redirects=True, headers={"User-Agent": "runner-research"}) as client:
+            while True:
+                now = datetime.now(timezone.utc)
+                out = {"at": now.isoformat(timespec="seconds")}
+                jobs = [("sweep", lambda: trend.sweep(conn, api, now)),
+                        ("w1", lambda: trend.revival_step(conn, api, rpc, now))]
+                if last_narr is None or now - last_narr >= timedelta(minutes=5):
+                    jobs.append(("n1", lambda: trend.narrative_step(conn, api, rpc, now)))
+                    last_narr = now
+                jobs += [("scored", lambda: trend.score(conn, gecko, now)),
+                         ("alerts", lambda: trend.send_alerts(conn, tg, client, rpc, now) if tg else None)]
+                for name, fn in jobs:
+                    try:
+                        out[name] = fn()
+                    except Exception as e:
+                        logging.getLogger(__name__).exception("trend %s", name)
+                        out[name] = redact_url(f"error: {type(e).__name__}: {e}")[:200]
+                print(json.dumps(out, ensure_ascii=False), flush=True)
+                if a.once:
+                    break
+                time.sleep(max(1.0, a.every - (datetime.now(timezone.utc) - now).total_seconds()))
     elif a.cmd == "repair-pools":
         from .ingest import repair_pools
         _, rpc, _, _ = clients()

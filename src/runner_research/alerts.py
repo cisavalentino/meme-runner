@@ -124,8 +124,7 @@ def result_message(r: dict, o: dict) -> str:
         f"{head} Maks {mx(o.get('max_mult'))} dari harga masuk · akhir {mx(o.get('last'))}"
         + (" · ☠️ rug" if o.get("rugged") else ""),
         f"🎯 Rencana ½@2x ½@5x SL0,6: {mx(o.get('plan'))} · jual semua @1,3x: {mx(o.get('x_tp13_nosl'))}",
-        f"🏷 Label: {e(lab)}",
-    ])
+    ] + ([] if r.get("rule") in ("w1", "n1") else [f"🏷 Label: {e(lab)}"]))
 
 
 def fetch_image(client: httpx.Client, url: str | None) -> bytes | None:
