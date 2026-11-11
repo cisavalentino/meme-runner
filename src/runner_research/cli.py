@@ -154,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
     wp.add_argument("--out", default="web/meme-research")
     lt = sub.add_parser("live-test", help="live test of the runner rule: decide at T0+60m, score after 72h")
     lt.add_argument("--once", action="store_true")
-    lt.add_argument("--every", type=int, default=30, help="seconds between steps")
+    lt.add_argument("--every", type=int, default=15, help="seconds between steps (e1 checks at T0+60s)")
     lt.add_argument("--out", default="web/meme-research")
     rp = sub.add_parser("repair-pools", help="re-read migration txs: fix wrong canonical pools, store reserves")
     rp.add_argument("--recent-days", type=float, default=4, help="also every token of the last N days")
@@ -294,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"wrote {write_page(conn, ApiClient(), a.out)} runners to {a.out}")
     elif a.cmd == "live-test":
         import httpx
-        from . import livetest
+        from . import early, livetest
         from .http import ApiClient, redact_url
         _, rpc, _, gecko = clients()
         api = ApiClient()
@@ -306,11 +306,21 @@ def main(argv: list[str] | None = None) -> int:
         tg = telegram.from_env()
         print(f"telegram alerts: {'on, ' + str(len(tg.chat_ids)) + ' chat(s)' if tg else 'off (no TELEGRAM_BOT_TOKEN/CHAT_ID)'}",
               flush=True)
+        from . import bot
+        if tg:
+            try:
+                bot.register(tg)
+                print(f"telegram commands: {', '.join('/' + c for c, _ in bot.COMMANDS)}", flush=True)
+            except Exception as e:
+                print(redact_url(f"telegram commands not registered: {e}")[:200], flush=True)
         with httpx.Client(timeout=20, follow_redirects=True, headers={"User-Agent": "runner-research"}) as client:
             while True:
                 now = datetime.now(timezone.utc)
                 out = {"at": now.isoformat(timespec="seconds")}
-                for name, fn in (("step", lambda: livetest.step(conn, gecko, rpc, client, now)),
+                for name, fn in (("early", lambda: early.step(conn, rpc, now)),
+                                 ("early_scored", lambda: early.score(conn, now)),
+                                 ("early_alerts", lambda: early.send_alerts(conn, tg, client, rpc, now) if tg else None),
+                                 ("step", lambda: livetest.step(conn, gecko, rpc, client, now)),
                                  ("scored", lambda: livetest.score(conn, now)),
                                  ("alerts", lambda: send_alerts(conn, tg, api, gecko, client, now) if tg else None)):
                     try:
@@ -327,7 +337,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(out), flush=True)
                 if a.once:
                     break
-                time.sleep(max(1.0, a.every - (datetime.now(timezone.utc) - now).total_seconds()))
+                wait = max(1.0, a.every - (datetime.now(timezone.utc) - now).total_seconds())
+                if tg:
+                    bot.poll(conn, tg, wait, prices)            # answers commands while waiting
+                else:
+                    time.sleep(wait)
     elif a.cmd == "repair-pools":
         from .ingest import repair_pools
         _, rpc, _, _ = clients()

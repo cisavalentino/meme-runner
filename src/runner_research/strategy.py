@@ -137,10 +137,11 @@ def simulate(after: list[tuple], entry: float, tps, sl: float, breakeven: bool) 
     return got + left * (after[-1][1] / entry)
 
 
-def outcome(t0: datetime, rows: list[tuple], entry: float) -> dict:
-    """From the entry close at T0+60m to T0+72h: best multiple, rug after
-    entry (close below 0.25% of the running max), and each exit plan in EXITS."""
-    after = [(ts, c) for ts, o, c in rows if ts + timedelta(minutes=5) > t0 + timedelta(minutes=ENTRY_MIN)]
+def outcome(t0: datetime, rows: list[tuple], entry: float, entry_min: float = ENTRY_MIN) -> dict:
+    """From the entry (T0+entry_min, default the 60m close) to T0+72h: best
+    multiple, rug after entry (close below 0.25% of the running max), and
+    each exit plan in EXITS."""
+    after = [(ts, c) for ts, o, c in rows if ts + timedelta(minutes=5) > t0 + timedelta(minutes=entry_min)]
     if not entry or not after:
         return {}
     best = run = entry
