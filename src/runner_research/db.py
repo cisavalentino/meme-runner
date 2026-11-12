@@ -182,6 +182,27 @@ CREATE TABLE IF NOT EXISTS alerts (
     messages TEXT,                   -- JSON chat id -> message id (results reply to it)
     PRIMARY KEY (mint, kind)
 );
+
+-- Tokens outside pump.fun graduations (other launchpads), seen on trending /
+-- boosts / new profiles; used only by the trend signals (w1, n1).
+CREATE TABLE IF NOT EXISTS ext_tokens (
+    mint       TEXT PRIMARY KEY,
+    name       TEXT,
+    symbol     TEXT,
+    pool       TEXT,                  -- most liquid pair (DexScreener)
+    dex        TEXT,
+    created_at TEXT,                  -- pair creation
+    source     TEXT,
+    fetched_at TEXT
+);
+
+-- pump.fun graduates + ext tokens with the columns the trend code uses.
+CREATE VIEW IF NOT EXISTS all_tokens AS
+    SELECT mint, name, symbol, canonical_pool, graduated_at, creator, bonding_curve, bonding_minutes,
+           'pumpfun' AS launchpad FROM tokens
+    UNION ALL
+    SELECT mint, name, symbol, pool, created_at, NULL, NULL, NULL, COALESCE(dex, 'other') FROM ext_tokens
+    WHERE mint NOT IN (SELECT mint FROM tokens);
 """
 
 # Columns added after the first release: (table, column, type). connect() adds missing ones.

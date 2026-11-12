@@ -100,3 +100,24 @@ def test_quota_skips_without_rejecting(conn, monkeypatch):
     trend.revival_step(conn, api, object(), NOW + timedelta(hours=1))          # rejected recently: not rechecked
     assert not calls
     assert trend.revival_step(conn, api, object(), NOW + timedelta(hours=7))["signal"] == 1 and calls
+
+
+def test_other_launchpad_token_from_trending(conn):
+    p = pair("PUSSYLoat") | {"baseToken": {"address": "PUSSYLoat", "name": "Pussy", "symbol": "PUSSY"},
+                              "dexId": "meteora", "pairCreatedAt": int((T0 - timedelta(days=2)).timestamp() * 1000)}
+    out = trend.revival_step(conn, FakeApi({"PUSSYLoat": p}, trending=["PUSSYLoat"]), None, NOW)
+    assert out["signal"] == 1
+    t = conn.execute("SELECT * FROM all_tokens WHERE mint = 'PUSSYLoat'").fetchone()
+    assert t["launchpad"] == "meteora" and t["canonical_pool"] == "PAIR_PUSSYLoat"
+    msg = trend.signal_message("w1", {"mint": "PUSSYLoat", "name": "Pussy", "symbol": "PUSSY"},
+                               json.loads(conn.execute("SELECT features FROM live_signals").fetchone()[0]), None)
+    assert "KEBANGKITAN" in msg
+
+
+def test_priority_when_two_rules_agree(conn):
+    from runner_research import alerts
+    add(conn, "OLD")
+    db.upsert(conn, "live_signals", [{"mint": "OLD", "rule": "e1", "t0": T0.isoformat(), "status": "signal",
+                                      "updated_at": T0.isoformat()}], key=("mint", "rule"))
+    assert "PRIORITAS" in alerts.priority_head(conn, "OLD", "w1") and "e1" in alerts.priority_head(conn, "OLD", "w1")
+    assert alerts.priority_head(conn, "OLD", "e1") == ""

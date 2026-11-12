@@ -82,7 +82,7 @@ def cmd_status(conn: sqlite3.Connection, now: datetime, prices: dict) -> str:
 
 
 def cmd_sinyal(conn: sqlite3.Connection, now: datetime, prices: dict) -> str:
-    rows = conn.execute("""SELECT l.mint, l.t0, l.entry_price, l.rule, t.symbol FROM live_signals l JOIN tokens t USING (mint)
+    rows = conn.execute("""SELECT l.mint, l.t0, l.entry_price, l.rule, t.symbol FROM live_signals l JOIN all_tokens t USING (mint)
                            WHERE l.rule IN (?, 'e1', 'w1', 'n1') AND l.status = 'signal' ORDER BY l.t0 DESC LIMIT 20""",
                         (livetest.RULE.version,)).fetchall()
     if not rows:
@@ -98,7 +98,7 @@ def cmd_sinyal(conn: sqlite3.Connection, now: datetime, prices: dict) -> str:
 
 
 def cmd_hasil(conn: sqlite3.Connection, now: datetime, prices: dict) -> str:
-    rows = conn.execute("""SELECT l.outcome, l.label, l.rule, t.symbol FROM live_signals l JOIN tokens t USING (mint)
+    rows = conn.execute("""SELECT l.outcome, l.label, l.rule, t.symbol FROM live_signals l JOIN all_tokens t USING (mint)
                            WHERE l.rule IN (?, 'e1', 'w1', 'n1') AND l.status = 'scored' ORDER BY l.t0 DESC LIMIT 15""",
                         (livetest.RULE.version,)).fetchall()
     if not rows:
@@ -118,7 +118,7 @@ def cmd_cek(conn: sqlite3.Connection, now: datetime, prices: dict, arg: str = ""
     mint = arg.strip().split()[0] if arg.strip() else ""
     if not mint:
         return "Pakai: <code>/cek &lt;mint&gt;</code>"
-    tok = conn.execute("SELECT name, symbol, graduated_at FROM tokens WHERE mint = ?", (mint,)).fetchone()
+    tok = conn.execute("SELECT name, symbol, graduated_at FROM all_tokens WHERE mint = ?", (mint,)).fetchone()
     if tok is None:
         return "Token ini tidak ada di data graduation (belum graduate, bukan pump.fun, atau alamat salah)."
     r = conn.execute("SELECT * FROM live_signals WHERE mint = ? AND rule = ?", (mint, livetest.RULE.version)).fetchone()

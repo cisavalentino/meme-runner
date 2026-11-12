@@ -156,6 +156,10 @@ def main(argv: list[str] | None = None) -> int:
     lt.add_argument("--once", action="store_true")
     lt.add_argument("--every", type=int, default=15, help="seconds between steps (e1 checks at T0+60s)")
     lt.add_argument("--out", default="web/meme-research")
+    lb = sub.add_parser("lp-backtest", help="LP into runners' pools after their ATH: fees vs price loss")
+    lb.add_argument("--out", default="reports/lp_backtest.json")
+    dg = sub.add_parser("digest", help="daily digest: e1 signals of 24h with price now, finished 72h results")
+    dg.add_argument("--send", action="store_true")
     rv = sub.add_parser("review", help="weekly review: rejected tokens per reason vs labels, signals per rule")
     rv.add_argument("--send", action="store_true", help="send to Telegram instead of printing")
     tr = sub.add_parser("trend", help="trend signals: w1 revival of old graduates, n1 narrative leader")
@@ -347,6 +351,24 @@ def main(argv: list[str] | None = None) -> int:
                     bot.poll(conn, tg, wait, prices)            # answers commands while waiting
                 else:
                     time.sleep(wait)
+    elif a.cmd == "lp-backtest":
+        from .lpbacktest import run, text
+        r = run(conn)
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.out).write_text(json.dumps(r, indent=1))
+        print(text(r))
+    elif a.cmd == "digest":
+        from . import telegram
+        from .digest import report as digest_report
+        from .http import ApiClient
+        text = digest_report(conn, ApiClient(), datetime.now(timezone.utc))
+        tg = telegram.from_env() if a.send else None
+        if tg:
+            for i in range(0, len(text), 3800):
+                tg.send(text[i:i + 3800])
+            print("sent")
+        else:
+            print(text)
     elif a.cmd == "review":
         from . import telegram
         from .review import report

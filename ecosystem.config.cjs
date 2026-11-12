@@ -33,6 +33,9 @@ module.exports = { apps: [
   // scores signals after 72h, writes web/meme-research/live.json every 30 s.
   rr('rr-live', 'live-test', { autorestart: true, restart_delay: 30000 }),
   rr('rr-trend', 'trend', { autorestart: true, restart_delay: 30000 }),
+  // Daily digest to Telegram 00:30 UTC (07:30 WIB): e1 signals (no instant e1 alerts) + finished results.
+  { name: 'rr-digest', cwd: __dirname, script: 'bash', interpreter: 'none', time: true,
+    args: ['-c', '.venv/bin/rr digest --send'], autorestart: false, cron_restart: '30 0 * * *' },
   // Weekly review to Telegram, Wednesday 01:00 UTC (08:00 WIB): are the thresholds throwing runners away?
   { name: 'rr-review', cwd: __dirname, script: 'bash', interpreter: 'none', time: true,
     args: ['-c', '.venv/bin/rr review --send'], autorestart: false, cron_restart: '0 1 * * 3' },

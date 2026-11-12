@@ -141,6 +141,21 @@ def fetch_image(client: httpx.Client, url: str | None) -> bytes | None:
     return None
 
 
+RULE_NAMES = {"r2": "r2 (menit 60)", "e1": "e1 (menit 1)", "w1": "w1 kebangkitan", "n1": "n1 narasi"}
+
+
+def confirmations(conn: sqlite3.Connection, mint: str, rule: str) -> list[str]:
+    """Other rules that signalled the same token (two independent rules agreeing = priority)."""
+    return [RULE_NAMES.get(r[0], r[0]) for r in conn.execute(
+        "SELECT rule FROM live_signals WHERE mint = ? AND rule != ? AND status IN ('signal', 'scored') ORDER BY t0",
+        (mint, rule))]
+
+
+def priority_head(conn: sqlite3.Connection, mint: str, rule: str) -> str:
+    c = confirmations(conn, mint, rule)
+    return f"🔴 <b>PRIORITAS</b> · juga lolos {e(', '.join(c))}\n" if c else ""
+
+
 def _sent(conn, mint: str, kind: str) -> dict | None:
     r = conn.execute("SELECT messages FROM alerts WHERE mint = ? AND kind = ?", (mint, kind)).fetchone()
     return json.loads(r[0] or "{}") if r else None
@@ -180,6 +195,7 @@ def send_alerts(conn: sqlite3.Connection, tg: Telegram, api, gecko, client: http
                              (r["creator"], r["graduated_at"])).fetchone()[0] if r["creator"] else None
         text = signal_message(dict(r), {**f, **{k: d[k] for k in ("dex_paid", "boosts", "sniper", "creator_sold")}},
                               pairs.get(r["mint"]), info, grads, json.loads(r["warnings"] or "[]"), now, rule)
+        text = priority_head(conn, r["mint"], rule) + text
         _mark(conn, r["mint"], "signal", tg.send(text, fetch_image(client, r["image"])))
         out["signal"] += 1
     for r in conn.execute(

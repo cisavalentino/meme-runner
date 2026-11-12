@@ -303,8 +303,14 @@ def signal_message(r: dict, f: dict, meta: dict | None, now: datetime) -> str:
     return "\n".join(lines)
 
 
+INSTANT_ALERTS = False   # e1 is noisy (16/day, most < 0.5x): it goes to the daily digest (digest.py);
+                         # an r2/w1/n1 alert on the same token is marked PRIORITAS instead
+
+
 def send_alerts(conn: sqlite3.Connection, tg: Telegram, client, rpc, now: datetime) -> dict:
     out = {"signal": 0, "result": 0}
+    if not INSTANT_ALERTS:
+        return out
     for r in conn.execute(
             """SELECT l.*, t.name, t.symbol FROM live_signals l JOIN tokens t USING (mint)
                WHERE l.rule = ? AND l.status = 'signal' AND l.t0 >= ?

@@ -21,7 +21,7 @@ import random
 import re
 import sqlite3
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
 from . import alerts, config, db, early, livetest, strategy
@@ -85,13 +85,30 @@ def trending_mints(api) -> list[str]:
         out += [p["relationships"]["base_token"]["data"]["id"].removeprefix("solana_") for p in js.get("data") or []]
     except Exception as ex:
         log.warning("gecko trending: %s", ex)
-    for path in ("token-boosts/latest/v1", "token-boosts/top/v1"):
+    for path in ("token-boosts/latest/v1", "token-boosts/top/v1", "token-profiles/latest/v1"):
         try:
             out += [x["tokenAddress"] for x in api.get_json(f"https://api.dexscreener.com/{path}") or []
                     if x.get("chainId") == "solana"]
         except Exception as ex:
             log.warning("dexscreener %s: %s", path, ex)
     return out
+
+
+def add_ext(conn: sqlite3.Connection, pairs: dict[str, dict], source: str) -> int:
+    """Store tokens that are not pump.fun graduates (other launchpads) so the
+    trend signals can watch them; pump.fun graduates are already in `tokens`."""
+    rows = []
+    for m, p in pairs.items():
+        if conn.execute("SELECT 1 FROM tokens WHERE mint = ?", (m,)).fetchone():
+            continue
+        bt = p.get("baseToken") or {}
+        ts = p.get("pairCreatedAt")
+        rows.append({"mint": m, "name": bt.get("name"), "symbol": bt.get("symbol"), "pool": p.get("pairAddress"),
+                     "dex": p.get("dexId"), "source": source, "fetched_at": db.now_iso(),
+                     "created_at": _iso(datetime.fromtimestamp(ts / 1000, tz=timezone.utc)) if ts else None})
+    if rows:
+        db.upsert(conn, "ext_tokens", rows, key=("mint",))
+    return len(rows)
 
 
 def _liq(p) -> float:
@@ -133,6 +150,17 @@ class QuotaExhausted(Exception):
     """No holder checks left today: the token is skipped, not rejected, and tried again later."""
 
 
+def program_owned(rpc, accs: list[dict], top: int = 30) -> set[str]:
+    """Largest holders that are program accounts (pool vaults, lockers, bonding
+    curves of other launchpads), not wallets: excluded from holder stats."""
+    by = {}
+    for a in accs:
+        by[a["owner"]] = by.get(a["owner"], 0) + a["amount"]
+    owners = [o for o, _ in sorted(by.items(), key=lambda kv: -kv[1])[:top]]
+    infos = rpc.accounts(owners) if owners else []
+    return {o for o, i in zip(owners, infos) if i is not None and i.get("owner") != early.SYSTEM}
+
+
 def holder_check(conn, rpc, tok, rng=None) -> tuple[dict, list[str]]:
     """e1's top-holder checks (no holder-count or pro-trader limit). Only the
     top holders are probed: w1/n1 do not use the pro-trader share."""
@@ -143,8 +171,8 @@ def holder_check(conn, rpc, tok, rng=None) -> tuple[dict, list[str]]:
     if used >= DEEP_PER_DAY:
         raise QuotaExhausted
     db.set_state(conn, key, str(used + 1))
-    exclude = {tok["canonical_pool"], tok["bonding_curve"]}
     accs = early.token_accounts(rpc, tok["mint"])
+    exclude = {tok["canonical_pool"], tok["bonding_curve"]} | program_owned(rpc, accs)
     f = early.holder_stats(accs, exclude, tok["creator"])
     f.update(early.deep(rpc, accs, exclude, tok["mint"], rng or random.Random(), sample=0))
     why = []
@@ -175,7 +203,7 @@ def _store(conn, mint: str, rule: str, now: datetime, status: str, why: list[str
 
 
 def _tok(conn, mint: str):
-    return conn.execute("SELECT * FROM tokens WHERE mint = ?", (mint,)).fetchone()
+    return conn.execute("SELECT * FROM all_tokens WHERE mint = ?", (mint,)).fetchone()
 
 
 def _done(conn, mint: str, rule: str, now: datetime | None = None) -> bool:
@@ -190,11 +218,14 @@ def _done(conn, mint: str, rule: str, now: datetime | None = None) -> bool:
 
 def revival_step(conn: sqlite3.Connection, api, rpc, now: datetime) -> dict:
     alive = _alive(conn)
-    t = sorted(set(trending_mints(api)))
-    known = {r[0] for r in conn.execute(f"SELECT mint FROM tokens WHERE mint IN ({','.join('?' * len(t))})", t)} if t else set()
+    trending = set(trending_mints(api))
+    new = sorted(trending - set(alive))
+    tp = fetch_pairs(api, new) if new else {}
+    add_ext(conn, tp, "trending")
+    known = {m for m in trending if _tok(conn, m) is not None}
     for m in known:
         alive[m] = "trending"
-    pairs = fetch_pairs(api, list(alive)) if alive else {}
+    pairs = {**tp, **(fetch_pairs(api, [m for m in alive if m not in tp]) if alive else {})}
     out = {"watched": len(alive), "trending": len(known), "signal": 0}
     for m in list(alive):
         p = pairs.get(m)
@@ -202,7 +233,7 @@ def revival_step(conn: sqlite3.Connection, api, rpc, now: datetime) -> dict:
             alive.pop(m)
             continue
         tok = _tok(conn, m)
-        if tok is None or _done(conn, m, "w1", now):
+        if tok is None or tok["graduated_at"] is None or _done(conn, m, "w1", now):
             continue
         why = revival_reasons(p, datetime.fromisoformat(tok["graduated_at"]), now)
         if why:
@@ -276,7 +307,7 @@ def narrative_step(conn: sqlite3.Connection, api, rpc, now: datetime) -> dict:
             continue
         out["words"] += 1
         cands = [r for r in conn.execute(
-            "SELECT * FROM tokens WHERE graduated_at >= ? AND (lower(name) LIKE ? OR lower(symbol) LIKE ?)",
+            "SELECT * FROM all_tokens WHERE graduated_at >= ? AND (lower(name) LIKE ? OR lower(symbol) LIKE ?)",
             (_iso(now - timedelta(days=SWEEP_DAYS)), f"%{w}%", f"%{w}%")) if w in _words(r["name"], r["symbol"])]
         pairs = fetch_pairs(api, [r["mint"] for r in cands])
         ranked = sorted(cands, key=lambda r: -_num(pairs.get(r["mint"]), "volume", "h1"))
@@ -321,7 +352,7 @@ def score(conn: sqlite3.Connection, gecko, now: datetime) -> int:
     n = 0
     for s in conn.execute(
             """SELECT l.mint, l.rule, l.t0, l.entry_price, l.features, t.canonical_pool FROM live_signals l
-               JOIN tokens t USING (mint) WHERE l.rule IN ('w1', 'n1') AND l.status = 'signal' AND l.t0 <= ?""",
+               JOIN all_tokens t USING (mint) WHERE l.rule IN ('w1', 'n1') AND l.status = 'signal' AND l.t0 <= ?""",
             (_iso(now - SCORE_AFTER),)).fetchall():
         t0 = datetime.fromisoformat(s["t0"])
         pool = json.loads(s["features"] or "{}").get("pair") or s["canonical_pool"]
@@ -384,7 +415,7 @@ def signal_message(rule: str, r: dict, f: dict, meta: dict | None) -> str:
 def send_alerts(conn: sqlite3.Connection, tg: Telegram, client, rpc, now: datetime) -> dict:
     out = {"signal": 0, "result": 0}
     for r in conn.execute(
-            """SELECT l.*, t.name, t.symbol FROM live_signals l JOIN tokens t USING (mint)
+            """SELECT l.*, t.name, t.symbol FROM live_signals l JOIN all_tokens t USING (mint)
                WHERE l.rule IN ('w1', 'n1') AND l.status = 'signal' AND l.t0 >= ?
                  AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.mint = l.mint AND a.kind = l.rule || '_signal')""",
             (_iso(now - timedelta(minutes=30)),)).fetchall():
@@ -393,12 +424,13 @@ def send_alerts(conn: sqlite3.Connection, tg: Telegram, client, rpc, now: dateti
         except Exception as ex:
             log.warning("meta %s: %s", r["mint"], ex)
             meta = None
-        text = signal_message(r["rule"], dict(r), json.loads(r["features"]), meta)
+        text = alerts.priority_head(conn, r["mint"], r["rule"]) + signal_message(r["rule"], dict(r),
+                                                                                 json.loads(r["features"]), meta)
         alerts._mark(conn, r["mint"], f"{r['rule']}_signal",
                      tg.send(text, alerts.fetch_image(client, (meta or {}).get("image"))))
         out["signal"] += 1
     for r in conn.execute(
-            """SELECT l.*, t.name, t.symbol FROM live_signals l JOIN tokens t USING (mint)
+            """SELECT l.*, t.name, t.symbol FROM live_signals l JOIN all_tokens t USING (mint)
                WHERE l.rule IN ('w1', 'n1') AND l.status = 'scored'
                  AND EXISTS (SELECT 1 FROM alerts a WHERE a.mint = l.mint AND a.kind = l.rule || '_signal')
                  AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.mint = l.mint AND a.kind = l.rule || '_result')""").fetchall():
