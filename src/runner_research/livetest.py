@@ -118,7 +118,8 @@ def hot_events(conn: sqlite3.Connection, now: datetime, common: set[str]) -> lis
             """SELECT t.name, t.symbol, t.graduated_at, p.pool_base, p.pool_quote, s.price, s.price_native
                FROM tokens t JOIN pools p ON p.pool = t.canonical_pool
                JOIN snapshots s ON s.mint = t.mint AND s.offset = '1h'
-               WHERE t.graduated_at >= ? AND p.pool_base > 0 AND s.price_native > 0""",
+               WHERE t.graduated_at >= ? AND p.pool_base > 0 AND s.price_native > 0
+                 AND s.price > 0  -- DexScreener drops priceUsd for dead pools""",
             (_iso(now - timedelta(hours=27)),)):
         gn = r["pool_quote"] / r["pool_base"]
         if gn <= 0 or gn * (r["price"] / r["price_native"]) * config.PUMPFUN_SUPPLY < config.HOLLOW_MCAP_USD:
@@ -415,6 +416,7 @@ def write(conn: sqlite3.Connection, out: str | Path, now: datetime, prices: dict
     tmp.write_text(json.dumps(js, ensure_ascii=False, separators=(",", ":")))
     tmp.replace(out / "live.json")
     (out / "live.html").write_text((Path(__file__).parent / "web" / "live.html").read_text())
+    (out / "guide.html").write_text((Path(__file__).parent / "web" / "guide.html").read_text())
     return len(js["signals"])
 
 

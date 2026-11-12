@@ -182,6 +182,59 @@ CREATE TABLE IF NOT EXISTS alerts (
     messages TEXT,                   -- JSON chat id -> message id (results reply to it)
     PRIMARY KEY (mint, kind)
 );
+
+-- Tokens outside pump.fun graduations (other launchpads), seen on trending /
+-- boosts / new profiles; used only by the trend signals (w1, n1).
+CREATE TABLE IF NOT EXISTS ext_tokens (
+    mint       TEXT PRIMARY KEY,
+    name       TEXT,
+    symbol     TEXT,
+    pool       TEXT,                  -- most liquid pair (DexScreener)
+    dex        TEXT,
+    created_at TEXT,                  -- pair creation
+    source     TEXT,
+    fetched_at TEXT
+);
+
+-- Token addresses called in Telegram channels/groups the user account reads (calls.py).
+CREATE TABLE IF NOT EXISTS tg_calls (
+    chat_id    INTEGER NOT NULL,
+    msg_id     INTEGER NOT NULL,
+    mint       TEXT NOT NULL,
+    chat_title TEXT,
+    posted_at  TEXT NOT NULL,
+    text       TEXT,
+    price0     REAL,                  -- DexScreener price at the call
+    mcap0      REAL,
+    price_1h   REAL,
+    price_6h   REAL,
+    price_24h  REAL,
+    max_seen   REAL,                  -- highest price seen while polling (every minute, 25h)
+    checked_at TEXT,
+    PRIMARY KEY (chat_id, msg_id, mint)
+);
+CREATE INDEX IF NOT EXISTS tg_calls_posted ON tg_calls (posted_at);
+
+-- Busy tokens every 5 minutes (pulse.py): research data for early-runner signs.
+-- holders..flow_span_s only on rows that got a deep check (daily Helius budget).
+CREATE TABLE IF NOT EXISTS pulse (
+    mint TEXT NOT NULL, ts TEXT NOT NULL, src TEXT, pool TEXT, dex TEXT,
+    price REAL, mcap REAL, liq REAL, vol5m REAL, vol1h REAL, vol6h REAL, vol24h REAL,
+    buys5m REAL, sells5m REAL, buys1h REAL, sells1h REAL, chg5m REAL, chg1h REAL, chg6h REAL,
+    pair_age_h REAL, boosts REAL,
+    holders INTEGER, holders_capped INTEGER, top10 REAL, dev REAL,
+    fee_ratio REAL, flow_buys INTEGER, flow_buyers INTEGER, retail_share REAL, small_share REAL, flow_span_s REAL,
+    PRIMARY KEY (mint, ts)
+);
+CREATE INDEX IF NOT EXISTS pulse_ts ON pulse (ts);
+
+-- pump.fun graduates + ext tokens with the columns the trend code uses.
+CREATE VIEW IF NOT EXISTS all_tokens AS
+    SELECT mint, name, symbol, canonical_pool, graduated_at, creator, bonding_curve, bonding_minutes,
+           'pumpfun' AS launchpad FROM tokens
+    UNION ALL
+    SELECT mint, name, symbol, pool, created_at, NULL, NULL, NULL, COALESCE(dex, 'other') FROM ext_tokens
+    WHERE mint NOT IN (SELECT mint FROM tokens);
 """
 
 # Columns added after the first release: (table, column, type). connect() adds missing ones.

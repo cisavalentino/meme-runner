@@ -154,8 +154,26 @@ def main(argv: list[str] | None = None) -> int:
     wp.add_argument("--out", default="web/meme-research")
     lt = sub.add_parser("live-test", help="live test of the runner rule: decide at T0+60m, score after 72h")
     lt.add_argument("--once", action="store_true")
-    lt.add_argument("--every", type=int, default=30, help="seconds between steps")
+    lt.add_argument("--every", type=int, default=15, help="seconds between steps (e1 checks at T0+60s)")
     lt.add_argument("--out", default="web/meme-research")
+    lb = sub.add_parser("lp-backtest", help="LP into runners' pools after their ATH: fees vs price loss")
+    lb.add_argument("--out", default="reports/lp_backtest.json")
+    dg = sub.add_parser("digest", help="daily digest: e1 signals of 24h with price now, finished 72h results")
+    dg.add_argument("--send", action="store_true")
+    rv = sub.add_parser("review", help="weekly review: rejected tokens per reason vs labels, signals per rule")
+    rv.add_argument("--send", action="store_true", help="send to Telegram instead of printing")
+    cl = sub.add_parser("calls", help="read Telegram call channels with a user account; signal c1")
+    tl = sub.add_parser("tg-login", help="log the Telegram user account in (step 1 --phone, step 2 --code)")
+    tl.add_argument("--phone")
+    tl.add_argument("--code")
+    tl.add_argument("--password")
+    tr = sub.add_parser("trend", help="trend signals: w1 revival of old graduates, n1 narrative leader")
+    tr.add_argument("--once", action="store_true")
+    tr.add_argument("--every", type=int, default=120, help="seconds between revival checks")
+    pu = sub.add_parser("pulse", help="snapshots of busy tokens every 5 min (early-runner research data)")
+    pu.add_argument("--once", action="store_true")
+    pu.add_argument("--stats", action="store_true", help="print what has been recorded and exit")
+    pu.add_argument("--every", type=int, default=300)
     rp = sub.add_parser("repair-pools", help="re-read migration txs: fix wrong canonical pools, store reserves")
     rp.add_argument("--recent-days", type=float, default=4, help="also every token of the last N days")
     sub.add_parser("telegram-chats", help="chats that messaged the bot (to find TELEGRAM_CHAT_ID)")
@@ -294,7 +312,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"wrote {write_page(conn, ApiClient(), a.out)} runners to {a.out}")
     elif a.cmd == "live-test":
         import httpx
-        from . import livetest
+        from . import early, livetest
         from .http import ApiClient, redact_url
         _, rpc, _, gecko = clients()
         api = ApiClient()
@@ -306,11 +324,21 @@ def main(argv: list[str] | None = None) -> int:
         tg = telegram.from_env()
         print(f"telegram alerts: {'on, ' + str(len(tg.chat_ids)) + ' chat(s)' if tg else 'off (no TELEGRAM_BOT_TOKEN/CHAT_ID)'}",
               flush=True)
+        from . import bot
+        if tg:
+            try:
+                bot.register(tg)
+                print(f"telegram commands: {', '.join('/' + c for c, _ in bot.COMMANDS)}", flush=True)
+            except Exception as e:
+                print(redact_url(f"telegram commands not registered: {e}")[:200], flush=True)
         with httpx.Client(timeout=20, follow_redirects=True, headers={"User-Agent": "runner-research"}) as client:
             while True:
                 now = datetime.now(timezone.utc)
                 out = {"at": now.isoformat(timespec="seconds")}
-                for name, fn in (("step", lambda: livetest.step(conn, gecko, rpc, client, now)),
+                for name, fn in (("early", lambda: early.step(conn, rpc, now, api=api)),
+                                 ("early_scored", lambda: early.score(conn, now)),
+                                 ("early_alerts", lambda: early.send_alerts(conn, tg, client, rpc, now) if tg else None),
+                                 ("step", lambda: livetest.step(conn, gecko, rpc, client, now)),
                                  ("scored", lambda: livetest.score(conn, now)),
                                  ("alerts", lambda: send_alerts(conn, tg, api, gecko, client, now) if tg else None)):
                     try:
@@ -327,7 +355,99 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(out), flush=True)
                 if a.once:
                     break
+                wait = max(1.0, a.every - (datetime.now(timezone.utc) - now).total_seconds())
+                if tg:
+                    bot.poll(conn, tg, wait, prices)            # answers commands while waiting
+                else:
+                    time.sleep(wait)
+    elif a.cmd == "lp-backtest":
+        from .lpbacktest import run, text
+        r = run(conn)
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.out).write_text(json.dumps(r, indent=1))
+        print(text(r))
+    elif a.cmd == "digest":
+        from . import telegram
+        from .digest import report as digest_report
+        from .http import ApiClient
+        text = digest_report(conn, ApiClient(), datetime.now(timezone.utc))
+        tg = telegram.from_env() if a.send else None
+        if tg:
+            for i in range(0, len(text), 3800):
+                tg.send(text[i:i + 3800])
+            print("sent")
+        else:
+            print(text)
+    elif a.cmd == "review":
+        from . import telegram
+        from .review import report
+        text = report(conn, datetime.now(timezone.utc))
+        tg = telegram.from_env() if a.send else None
+        if tg:
+            for i in range(0, len(text), 3800):                 # Telegram message limit 4096
+                tg.send(text[i:i + 3800])
+            print("sent")
+        else:
+            print(text)
+    elif a.cmd == "tg-login":
+        import asyncio
+        from .calls import login
+        print(asyncio.run(login(conn, a.phone, a.code, a.password)))
+    elif a.cmd == "calls":
+        import asyncio
+        import httpx
+        from . import telegram
+        from .calls import run as run_calls
+        from .http import ApiClient
+        _, rpc, _, _ = clients()
+        with httpx.Client(timeout=20, follow_redirects=True, headers={"User-Agent": "runner-research"}) as client:
+            asyncio.run(run_calls(a.db, ApiClient(), rpc, telegram.from_env(), client))
+    elif a.cmd == "trend":
+        import httpx
+        from . import telegram, trend
+        from .http import ApiClient, redact_url
+        _, rpc, _, gecko = clients()
+        api, tg = ApiClient(), telegram.from_env()
+        last_narr = None
+        with httpx.Client(timeout=20, follow_redirects=True, headers={"User-Agent": "runner-research"}) as client:
+            while True:
+                now = datetime.now(timezone.utc)
+                out = {"at": now.isoformat(timespec="seconds")}
+                jobs = [("sweep", lambda: trend.sweep(conn, api, now)),
+                        ("w1", lambda: trend.revival_step(conn, api, rpc, now))]
+                if last_narr is None or now - last_narr >= timedelta(minutes=5):
+                    jobs.append(("n1", lambda: trend.narrative_step(conn, api, rpc, now)))
+                    last_narr = now
+                jobs += [("scored", lambda: trend.score(conn, gecko, now)),
+                         ("alerts", lambda: trend.send_alerts(conn, tg, client, rpc, now) if tg else None)]
+                for name, fn in jobs:
+                    try:
+                        out[name] = fn()
+                    except Exception as e:
+                        logging.getLogger(__name__).exception("trend %s", name)
+                        out[name] = redact_url(f"error: {type(e).__name__}: {e}")[:200]
+                print(json.dumps(out, ensure_ascii=False), flush=True)
+                if a.once:
+                    break
                 time.sleep(max(1.0, a.every - (datetime.now(timezone.utc) - now).total_seconds()))
+    elif a.cmd == "pulse":
+        from . import pulse
+        if a.stats:
+            print(json.dumps(pulse.stats(conn), ensure_ascii=False))
+            return 0
+        api, rpc, _, _ = clients()
+        while True:
+            now = datetime.now(timezone.utc)
+            try:
+                out = {"at": now.isoformat(timespec="seconds"), **pulse.step(conn, api, rpc, now)}
+            except Exception as e:
+                from .http import redact_url
+                logging.getLogger(__name__).exception("pulse")
+                out = {"at": now.isoformat(timespec="seconds"), "error": redact_url(f"{type(e).__name__}: {e}")[:200]}
+            print(json.dumps(out, ensure_ascii=False), flush=True)
+            if a.once:
+                break
+            time.sleep(max(1.0, a.every - (datetime.now(timezone.utc) - now).total_seconds()))
     elif a.cmd == "repair-pools":
         from .ingest import repair_pools
         _, rpc, _, _ = clients()

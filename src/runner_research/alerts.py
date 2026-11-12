@@ -54,6 +54,11 @@ def link(url: str | None, text: str) -> str | None:
     return f'<a href="{e(url).replace(chr(34), "&quot;")}">{e(text)}</a>'
 
 
+def _authority(v) -> bool:
+    """True when a mint/freeze authority is still set (GeckoTerminal says 'no' when revoked)."""
+    return bool(v) and str(v).strip().lower() not in ("no", "none", "null", "false", "0")
+
+
 def signal_message(r: dict, f: dict, pair: dict | None, info: dict | None, creator_grads: int | None,
                    warnings: list[str], now: datetime, rule: str) -> str:
     t0 = datetime.fromisoformat(r["t0"])
@@ -79,7 +84,8 @@ def signal_message(r: dict, f: dict, pair: dict | None, info: dict | None, creat
     if i:
         lines.append(f"👥 {i.get('holders') or '–'} · Top10 {i['top10_pct']:.1f}%" if i.get("top10_pct") is not None
                      else f"👥 {i.get('holders') or '–'}")
-        lines.append(f"🔐 Mint {'❌' if i.get('mint_auth') else '✅'} · Freeze {'❌' if i.get('freeze_auth') else '✅'}"
+        lines.append(f"🔐 Mint {'❌' if _authority(i.get('mint_auth')) else '✅'} · "
+                     f"Freeze {'❌' if _authority(i.get('freeze_auth')) else '✅'}"
                      + (f" · Dev {i['dev_pct']:.1f}%" if i.get("dev_pct") is not None else ""))
     extra = []
     if f.get("sniper") is not None:
@@ -91,6 +97,10 @@ def signal_message(r: dict, f: dict, pair: dict | None, info: dict | None, creat
     if extra:
         lines.append(" · ".join(extra))
     jump = f.get("max_jump_1h")
+    if jump is None:
+        warnings = list(warnings) + ["lonjakan 1 candle tidak dicek (candle GeckoTerminal tidak tersedia)"]
+    if not i or i.get("holders") is None:
+        warnings = list(warnings) + ["data holder belum tersedia (GeckoTerminal sibuk)"]
     lines.append(f"🕯 Lonjakan 1 candle maks {mx(jump)}" + (f" · ⏳ Bonding {bond * 60:.0f} dtk" if bond is not None and bond < 1
                                                       else f" · ⏳ Bonding {bond:.0f} mnt" if bond else ""))
     if creator_grads is not None:
@@ -124,8 +134,7 @@ def result_message(r: dict, o: dict) -> str:
         f"{head} Maks {mx(o.get('max_mult'))} dari harga masuk · akhir {mx(o.get('last'))}"
         + (" · ☠️ rug" if o.get("rugged") else ""),
         f"🎯 Rencana ½@2x ½@5x SL0,6: {mx(o.get('plan'))} · jual semua @1,3x: {mx(o.get('x_tp13_nosl'))}",
-        f"🏷 Label: {e(lab)}",
-    ])
+    ] + ([] if r.get("rule") in ("w1", "n1") else [f"🏷 Label: {e(lab)}"]))
 
 
 def fetch_image(client: httpx.Client, url: str | None) -> bytes | None:
@@ -140,6 +149,21 @@ def fetch_image(client: httpx.Client, url: str | None) -> bytes | None:
         except httpx.HTTPError:
             continue
     return None
+
+
+RULE_NAMES = {"r2": "r2 (menit 60)", "e1": "e1 (menit 1)", "w1": "w1 kebangkitan", "n1": "n1 narasi"}
+
+
+def confirmations(conn: sqlite3.Connection, mint: str, rule: str) -> list[str]:
+    """Other rules that signalled the same token (two independent rules agreeing = priority)."""
+    return [RULE_NAMES.get(r[0], r[0]) for r in conn.execute(
+        "SELECT rule FROM live_signals WHERE mint = ? AND rule != ? AND status IN ('signal', 'scored') ORDER BY t0",
+        (mint, rule))]
+
+
+def priority_head(conn: sqlite3.Connection, mint: str, rule: str) -> str:
+    c = confirmations(conn, mint, rule)
+    return f"🔴 <b>PRIORITAS</b> · juga lolos {e(', '.join(c))}\n" if c else ""
 
 
 def _sent(conn, mint: str, kind: str) -> dict | None:
@@ -181,6 +205,7 @@ def send_alerts(conn: sqlite3.Connection, tg: Telegram, api, gecko, client: http
                              (r["creator"], r["graduated_at"])).fetchone()[0] if r["creator"] else None
         text = signal_message(dict(r), {**f, **{k: d[k] for k in ("dex_paid", "boosts", "sniper", "creator_sold")}},
                               pairs.get(r["mint"]), info, grads, json.loads(r["warnings"] or "[]"), now, rule)
+        text = priority_head(conn, r["mint"], rule) + text
         _mark(conn, r["mint"], "signal", tg.send(text, fetch_image(client, r["image"])))
         out["signal"] += 1
     for r in conn.execute(
