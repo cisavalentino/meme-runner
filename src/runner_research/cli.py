@@ -156,6 +156,8 @@ def main(argv: list[str] | None = None) -> int:
     lt.add_argument("--once", action="store_true")
     lt.add_argument("--every", type=int, default=15, help="seconds between steps (e1 checks at T0+60s)")
     lt.add_argument("--out", default="web/meme-research")
+    rv = sub.add_parser("review", help="weekly review: rejected tokens per reason vs labels, signals per rule")
+    rv.add_argument("--send", action="store_true", help="send to Telegram instead of printing")
     tr = sub.add_parser("trend", help="trend signals: w1 revival of old graduates, n1 narrative leader")
     tr.add_argument("--once", action="store_true")
     tr.add_argument("--every", type=int, default=120, help="seconds between revival checks")
@@ -345,6 +347,17 @@ def main(argv: list[str] | None = None) -> int:
                     bot.poll(conn, tg, wait, prices)            # answers commands while waiting
                 else:
                     time.sleep(wait)
+    elif a.cmd == "review":
+        from . import telegram
+        from .review import report
+        text = report(conn, datetime.now(timezone.utc))
+        tg = telegram.from_env() if a.send else None
+        if tg:
+            for i in range(0, len(text), 3800):                 # Telegram message limit 4096
+                tg.send(text[i:i + 3800])
+            print("sent")
+        else:
+            print(text)
     elif a.cmd == "trend":
         import httpx
         from . import telegram, trend

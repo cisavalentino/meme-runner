@@ -33,6 +33,9 @@ module.exports = { apps: [
   // scores signals after 72h, writes web/meme-research/live.json every 30 s.
   rr('rr-live', 'live-test', { autorestart: true, restart_delay: 30000 }),
   rr('rr-trend', 'trend', { autorestart: true, restart_delay: 30000 }),
+  // Weekly review to Telegram, Wednesday 01:00 UTC (08:00 WIB): are the thresholds throwing runners away?
+  { name: 'rr-review', cwd: __dirname, script: 'bash', interpreter: 'none', time: true,
+    args: ['-c', '.venv/bin/rr review --send'], autorestart: false, cron_restart: '0 1 * * 3' },
   // Runner table (live DexScreener) + insights.json, every 15 min.
   { name: 'rr-runners', cwd: __dirname, script: 'bash', interpreter: 'none', time: true,
     args: ['-c', '.venv/bin/rr runners-page && .venv/bin/rr insights'],
