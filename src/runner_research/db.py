@@ -215,6 +215,19 @@ CREATE TABLE IF NOT EXISTS tg_calls (
 );
 CREATE INDEX IF NOT EXISTS tg_calls_posted ON tg_calls (posted_at);
 
+-- Busy tokens every 5 minutes (pulse.py): research data for early-runner signs.
+-- holders..flow_span_s only on rows that got a deep check (daily Helius budget).
+CREATE TABLE IF NOT EXISTS pulse (
+    mint TEXT NOT NULL, ts TEXT NOT NULL, src TEXT, pool TEXT, dex TEXT,
+    price REAL, mcap REAL, liq REAL, vol5m REAL, vol1h REAL, vol6h REAL, vol24h REAL,
+    buys5m REAL, sells5m REAL, buys1h REAL, sells1h REAL, chg5m REAL, chg1h REAL, chg6h REAL,
+    pair_age_h REAL, boosts REAL,
+    holders INTEGER, holders_capped INTEGER, top10 REAL, dev REAL,
+    fee_ratio REAL, flow_buys INTEGER, flow_buyers INTEGER, retail_share REAL, small_share REAL, flow_span_s REAL,
+    PRIMARY KEY (mint, ts)
+);
+CREATE INDEX IF NOT EXISTS pulse_ts ON pulse (ts);
+
 -- pump.fun graduates + ext tokens with the columns the trend code uses.
 CREATE VIEW IF NOT EXISTS all_tokens AS
     SELECT mint, name, symbol, canonical_pool, graduated_at, creator, bonding_curve, bonding_minutes,

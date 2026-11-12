@@ -170,6 +170,10 @@ def main(argv: list[str] | None = None) -> int:
     tr = sub.add_parser("trend", help="trend signals: w1 revival of old graduates, n1 narrative leader")
     tr.add_argument("--once", action="store_true")
     tr.add_argument("--every", type=int, default=120, help="seconds between revival checks")
+    pu = sub.add_parser("pulse", help="snapshots of busy tokens every 5 min (early-runner research data)")
+    pu.add_argument("--once", action="store_true")
+    pu.add_argument("--stats", action="store_true", help="print what has been recorded and exit")
+    pu.add_argument("--every", type=int, default=300)
     rp = sub.add_parser("repair-pools", help="re-read migration txs: fix wrong canonical pools, store reserves")
     rp.add_argument("--recent-days", type=float, default=4, help="also every token of the last N days")
     sub.add_parser("telegram-chats", help="chats that messaged the bot (to find TELEGRAM_CHAT_ID)")
@@ -426,6 +430,24 @@ def main(argv: list[str] | None = None) -> int:
                 if a.once:
                     break
                 time.sleep(max(1.0, a.every - (datetime.now(timezone.utc) - now).total_seconds()))
+    elif a.cmd == "pulse":
+        from . import pulse
+        if a.stats:
+            print(json.dumps(pulse.stats(conn), ensure_ascii=False))
+            return 0
+        api, rpc, _, _ = clients()
+        while True:
+            now = datetime.now(timezone.utc)
+            try:
+                out = {"at": now.isoformat(timespec="seconds"), **pulse.step(conn, api, rpc, now)}
+            except Exception as e:
+                from .http import redact_url
+                logging.getLogger(__name__).exception("pulse")
+                out = {"at": now.isoformat(timespec="seconds"), "error": redact_url(f"{type(e).__name__}: {e}")[:200]}
+            print(json.dumps(out, ensure_ascii=False), flush=True)
+            if a.once:
+                break
+            time.sleep(max(1.0, a.every - (datetime.now(timezone.utc) - now).total_seconds()))
     elif a.cmd == "repair-pools":
         from .ingest import repair_pools
         _, rpc, _, _ = clients()

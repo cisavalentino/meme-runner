@@ -33,6 +33,8 @@ module.exports = { apps: [
   // scores signals after 72h, writes web/meme-research/live.json every 30 s.
   rr('rr-live', 'live-test', { autorestart: true, restart_delay: 30000 }),
   rr('rr-trend', 'trend', { autorestart: true, restart_delay: 30000 }),
+  // Busy-token snapshots every 5 min (research data for early-runner signs); Helius deep checks capped per day.
+  rr('rr-pulse', 'pulse', { autorestart: true, restart_delay: 30000 }),
   // Telegram call channels (user account, needs `rr tg-login` first): signal c1 + channel grades.
   rr('rr-calls', 'calls', { autorestart: true, restart_delay: 60000 }),
   // Daily digest to Telegram 00:30 UTC (07:30 WIB): e1 signals (no instant e1 alerts) + finished results.
