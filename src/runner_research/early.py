@@ -25,7 +25,7 @@ import sqlite3
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from . import alerts, config, db, livetest, strategy
+from . import alerts, config, db, fees, livetest, strategy
 from .telegram import Telegram, e
 
 log = logging.getLogger(__name__)
@@ -184,7 +184,7 @@ def evaluate(f: dict) -> list[str]:
     return why
 
 
-def step(conn: sqlite3.Connection, rpc, now: datetime, rng: random.Random | None = None) -> dict:
+def step(conn: sqlite3.Connection, rpc, now: datetime, rng: random.Random | None = None, api=None) -> dict:
     rng = rng or random.Random()
     since = db.get_state(conn, "early_since")
     if since is None:
@@ -223,6 +223,12 @@ def step(conn: sqlite3.Connection, rpc, now: datetime, rng: random.Random | None
                         db.set_state(conn, day_key, str(used + 1))
                         f.update(deep(rpc, accs, exclude, tok["mint"], rng))
                         why = evaluate(f)
+                if not why and api is not None:
+                    try:
+                        f.update(fees.fee_ratio(api, tok["canonical_pool"], tok["mint"], tok["quote_mint"]))
+                    except Exception as ex:
+                        log.warning("fees %s: %s", tok["mint"], ex)
+                    why = fees.check(f)
                 if not why:
                     p = pool_price(rpc, tok["canonical_pool"], tok["mint"], tok["quote_mint"])
                     f["price_native"] = p
@@ -293,6 +299,8 @@ def signal_message(r: dict, f: dict, meta: dict | None, now: datetime) -> str:
         f"🕸 Cluster top holder {f['cluster']:.1f}% ({f['cluster_wallets']} wallet)"
         + (f" · {f['transfer_in']} top holder dapat token via transfer" if f.get("transfer_in") else ""),
     ]
+    if fees.line(f):
+        lines.append(fees.line(f))
     if bond is not None:
         lines.append(f"⏳ Bonding {bond * 60:.0f} dtk" if bond < 1 else f"⏳ Bonding {bond:.0f} mnt")
     lines.append("🔗 " + (" · ".join(socials) if socials else "tanpa sosial"))

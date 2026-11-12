@@ -75,6 +75,13 @@ def report(conn: sqlite3.Connection, now: datetime) -> str:
             for lab, lo, hi in (("≤5%", -1, 5), ("5–10%", 5, 10), ("10–20%", 10, 20), (">20%", 20, 101)):
                 lines.append(_line(f"creator {lab}", [r for r, f in feats
                                                       if f.get("dev") is not None and lo < f["dev"] <= hi]))
+        if rule == "e1":
+            lines.append("<i>Fee trader / volume saat sinyal:</i>")
+        for lab, lo, hi in (("<0,1%", -1, .001), ("0,1–0,3%", .001, .003), ("0,3–1%", .003, .01),
+                            ("1–10%", .01, .1), (">10%", .1, 99)):
+            if rule == "e1":
+                lines.append(_line(f"fee {lab}", [r for r, f in feats
+                                                   if f.get("fee_ratio") is not None and lo <= f["fee_ratio"] < hi]))
         if rule == "r2":
             lines.append("<i>Harga di menit 60 vs graduation:</i>")
             for lab, lo, hi in (("1,5–5x (zona sinyal)", 1.5, 5), ("5–10x", 5, 10), ("≥10x", 10, 1e9)):

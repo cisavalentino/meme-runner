@@ -24,7 +24,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
-from . import alerts, config, db, early, livetest, strategy
+from . import alerts, config, db, early, fees, livetest, strategy
 from .insights import STOPWORDS
 from .telegram import Telegram, e
 from .webpage import fetch_pairs
@@ -193,6 +193,17 @@ def _pair_features(p: dict) -> dict:
             "sells": _num(p, "txns", "h1", "sells"), "pair": p.get("pairAddress")}
 
 
+def _fees(api, p: dict | None, mint: str) -> dict:
+    """Trader fees / volume on the token's most liquid pair (SOL-quoted pairs only)."""
+    if not p or (p.get("quoteToken") or {}).get("address") not in (None, fees.WSOL):
+        return {}
+    try:
+        return fees.fee_ratio(api, p.get("pairAddress"), mint)
+    except Exception as ex:
+        log.warning("fees %s: %s", mint, ex)
+        return {}
+
+
 def _store(conn, mint: str, rule: str, now: datetime, status: str, why: list[str], f: dict) -> None:
     db.upsert(conn, "live_signals", [{
         "mint": mint, "rule": rule, "t0": _iso(now), "status": status,
@@ -240,9 +251,12 @@ def revival_step(conn: sqlite3.Connection, api, rpc, now: datetime) -> dict:
             continue                                    # quiet tokens are not stored
         f = {**_pair_features(p), "source": alive[m],
              "age_days": round((now - datetime.fromisoformat(tok["graduated_at"])).total_seconds() / 86400, 1)}
+        f.update(_fees(api, p, m))
+        why = fees.check(f)
         try:
-            hf, why = holder_check(conn, rpc, tok)
-            f.update(hf)
+            if not why:
+                hf, why = holder_check(conn, rpc, tok)
+                f.update(hf)
         except QuotaExhausted:
             out["quota"] = True
             continue
@@ -331,6 +345,9 @@ def narrative_step(conn: sqlite3.Connection, api, rpc, now: datetime) -> dict:
              "age_days": round((now - datetime.fromisoformat(lead["graduated_at"])).total_seconds() / 86400, 1),
              **news(api, w, now)}
         if not why:
+            f.update(_fees(api, p, lead["mint"]))
+            why = fees.check(f)
+        if not why:
             try:
                 hf, why = holder_check(conn, rpc, lead)
                 f.update(hf)
@@ -398,6 +415,8 @@ def signal_message(rule: str, r: dict, f: dict, meta: dict | None) -> str:
         + f" · 1j {alerts.pct(f.get('chg1h'))} · 5m {alerts.pct(f.get('chg5m'))}",
         f"🅑{f.get('buys', 0):.0f} Ⓢ{f.get('sells', 0):.0f} (1 jam)",
     ]
+    if fees.line(f):
+        lines.append(fees.line(f))
     if f.get("holders") is not None:
         lines.append(f"👥 {f['holders']} holder · Top10 {f['top10']:.1f}% · cluster {f.get('cluster', 0):.1f}%"
                      + (f" · pro trader {f['pro'] * 100:.0f}%" if f.get("pro") is not None else ""))

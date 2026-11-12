@@ -326,7 +326,7 @@ def main(argv: list[str] | None = None) -> int:
             while True:
                 now = datetime.now(timezone.utc)
                 out = {"at": now.isoformat(timespec="seconds")}
-                for name, fn in (("early", lambda: early.step(conn, rpc, now)),
+                for name, fn in (("early", lambda: early.step(conn, rpc, now, api=api)),
                                  ("early_scored", lambda: early.score(conn, now)),
                                  ("early_alerts", lambda: early.send_alerts(conn, tg, client, rpc, now) if tg else None),
                                  ("step", lambda: livetest.step(conn, gecko, rpc, client, now)),
