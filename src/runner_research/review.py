@@ -87,6 +87,15 @@ def report(conn: sqlite3.Connection, now: datetime) -> str:
             for lab, lo, hi in (("1,5–5x (zona sinyal)", 1.5, 5), ("5–10x", 5, 10), ("≥10x", 10, 1e9)):
                 lines.append(_line(f"60m {lab}", [r for r, f in feats
                                                   if f.get("m60") is not None and lo <= f["m60"] < hi]))
+    lines += ["", "<b>w1/n1: gelombang retail vs tidak</b> (sinyal dinilai 21 hari, ≥2x dari masuk)"]
+    sc = conn.execute("SELECT features, outcome FROM live_signals WHERE rule IN ('w1', 'n1', 'c1') "
+                      "AND status = 'scored' AND t0 >= ?", (since_lab,)).fetchall()
+    pairs = [(json.loads(r["features"] or "{}"), json.loads(r["outcome"] or "{}")) for r in sc]
+    pairs = [(f, o) for f, o in pairs if o.get("max_mult") is not None and f.get("flow_buys")]
+    for lab, pred in (("gelombang retail (≥40% lewat wallet biasa)", lambda f: f.get("retail_share", 0) >= 0.4),
+                      ("bukan", lambda f: f.get("retail_share", 0) < 0.4)):
+        g = [o for f, o in pairs if pred(f)]
+        lines.append(f"• {lab}: n={len(g)} · ≥2x {_rate(g, lambda o: o['max_mult'] >= 2)}")
     lines += ["", "Runner = label slow_climb/runner_other. Kelompok ditolak dengan runner% jauh di atas sinyal "
                   "= batas itu membuang runner; tanyakan Claude untuk menyesuaikan."]
     return "\n".join(lines)

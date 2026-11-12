@@ -25,6 +25,7 @@ COMMANDS = [
     ("sinyal", "Sinyal aktif semua aturan + harga sekarang"),
     ("hasil", "Hasil 72 jam sinyal terakhir"),
     ("cek", "Status satu token: /cek <mint>"),
+    ("kanal", "Rapor channel call Telegram"),
     ("help", "Daftar command"),
 ]
 
@@ -41,8 +42,8 @@ def _rows(conn, sql: str, *args, rule: str | None = None):
 
 
 EXTRA = [("e1", "⚡ Sinyal awal e1 (menit 1: holder, pro trader)"), ("w1", "🌊 Kebangkitan w1 (token lama ramai lagi)"),
-         ("n1", "🔥 Narasi n1 (pemimpin kata yang sedang ramai)")]
-ICON = {"r2": "🟢", "e1": "⚡", "w1": "🌊", "n1": "🔥"}
+         ("n1", "🔥 Narasi n1 (pemimpin kata yang sedang ramai)"), ("c1", "📣 Call c1 (disebut ≥2 channel Telegram)")]
+ICON = {"r2": "🟢", "e1": "⚡", "w1": "🌊", "n1": "🔥", "c1": "📣"}
 SIG, OPEN, PENDING = "status IN ('signal', 'scored')", "status = 'signal'", "status = 'pending'"
 
 
@@ -83,7 +84,7 @@ def cmd_status(conn: sqlite3.Connection, now: datetime, prices: dict) -> str:
 
 def cmd_sinyal(conn: sqlite3.Connection, now: datetime, prices: dict) -> str:
     rows = conn.execute("""SELECT l.mint, l.t0, l.entry_price, l.rule, t.symbol FROM live_signals l JOIN all_tokens t USING (mint)
-                           WHERE l.rule IN (?, 'e1', 'w1', 'n1') AND l.status = 'signal' ORDER BY l.t0 DESC LIMIT 20""",
+                           WHERE l.rule IN (?, 'e1', 'w1', 'n1', 'c1') AND l.status = 'signal' ORDER BY l.t0 DESC LIMIT 20""",
                         (livetest.RULE.version,)).fetchall()
     if not rows:
         return "Belum ada sinyal aktif (sinyal < 72 jam)."
@@ -99,7 +100,7 @@ def cmd_sinyal(conn: sqlite3.Connection, now: datetime, prices: dict) -> str:
 
 def cmd_hasil(conn: sqlite3.Connection, now: datetime, prices: dict) -> str:
     rows = conn.execute("""SELECT l.outcome, l.label, l.rule, t.symbol FROM live_signals l JOIN all_tokens t USING (mint)
-                           WHERE l.rule IN (?, 'e1', 'w1', 'n1') AND l.status = 'scored' ORDER BY l.t0 DESC LIMIT 15""",
+                           WHERE l.rule IN (?, 'e1', 'w1', 'n1', 'c1') AND l.status = 'scored' ORDER BY l.t0 DESC LIMIT 15""",
                         (livetest.RULE.version,)).fetchall()
     if not rows:
         return "Belum ada sinyal yang selesai 72 jam."
@@ -148,7 +149,7 @@ def cmd_cek(conn: sqlite3.Connection, now: datetime, prices: dict, arg: str = ""
 
 def _cek_early(conn, mint: str) -> list[str]:
     out = []
-    for r in conn.execute("SELECT * FROM live_signals WHERE mint = ? AND rule IN ('w1', 'n1')", (mint,)):
+    for r in conn.execute("SELECT * FROM live_signals WHERE mint = ? AND rule IN ('w1', 'n1', 'c1')", (mint,)):
         f = json.loads(r["features"] or "{}")
         st = "SINYAL" if r["status"] in ("signal", "scored") else "ditolak"
         out += ["", f"{ICON[r['rule']]} <b>{r['rule']}</b>: {st} · "
@@ -175,7 +176,21 @@ def cmd_help(conn, now, prices) -> str:
                      ["", "Alert sinyal dan hasil 72 jam dikirim otomatis."])
 
 
-HANDLERS = {"status": cmd_status, "sinyal": cmd_sinyal, "hasil": cmd_hasil, "cek": cmd_cek,
+def cmd_kanal(conn: sqlite3.Connection, now: datetime, prices: dict) -> str:
+    from .calls import channel_stats
+    st = channel_stats(conn)
+    if not st:
+        n = conn.execute("SELECT COUNT(*) FROM tg_calls").fetchone()[0]
+        return f"Belum ada channel dengan ≥3 call ({n} call tercatat). Rapor muncul setelah call berumur 24 jam."
+    lines = ["📣 <b>RAPOR CHANNEL CALL</b> (harga 24 jam setelah call)"]
+    for c in st[:20]:
+        lines.append(f"• <b>{e(c['chat'][:40])}</b>: {c['calls']} call"
+                     + (f" · median {mx(c['x24_median'])} · {c['hit2'] * 100:.0f}% sempat ≥2x · "
+                        f"{c['dump'] * 100:.0f}% turun &gt;50%" if c["graded"] else " · belum ada yang 24 jam"))
+    return "\n".join(lines)
+
+
+HANDLERS = {"kanal": cmd_kanal, "status": cmd_status, "sinyal": cmd_sinyal, "hasil": cmd_hasil, "cek": cmd_cek,
             "help": cmd_help, "start": cmd_help}
 
 

@@ -299,8 +299,9 @@ def signal_message(r: dict, f: dict, meta: dict | None, now: datetime) -> str:
         f"🕸 Cluster top holder {f['cluster']:.1f}% ({f['cluster_wallets']} wallet)"
         + (f" · {f['transfer_in']} top holder dapat token via transfer" if f.get("transfer_in") else ""),
     ]
-    if fees.line(f):
-        lines.append(fees.line(f))
+    for extra in (fees.line(f), fees.flow_line(f)):
+        if extra:
+            lines.append(extra)
     if bond is not None:
         lines.append(f"⏳ Bonding {bond * 60:.0f} dtk" if bond < 1 else f"⏳ Bonding {bond:.0f} mnt")
     lines.append("🔗 " + (" · ".join(socials) if socials else "tanpa sosial"))

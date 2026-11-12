@@ -50,7 +50,7 @@ RECHECK = timedelta(hours=6)  # a rejected w1 token is checked again after this
 NARR_RETRY = timedelta(minutes=30)  # a word whose leader was rejected is looked at again after this
 SCORE_AFTER = livetest.SCORE_AFTER
 NEWS_URL = "https://news.google.com/rss/search"
-RULES = {"w1": "🌊 KEBANGKITAN", "n1": "🔥 NARASI"}
+RULES = {"w1": "🌊 KEBANGKITAN", "n1": "🔥 NARASI", "c1": "📣 CALL TELEGRAM"}
 
 
 # ---------------------------------------------------------------- watch list
@@ -369,7 +369,7 @@ def score(conn: sqlite3.Connection, gecko, now: datetime) -> int:
     n = 0
     for s in conn.execute(
             """SELECT l.mint, l.rule, l.t0, l.entry_price, l.features, t.canonical_pool FROM live_signals l
-               JOIN all_tokens t USING (mint) WHERE l.rule IN ('w1', 'n1') AND l.status = 'signal' AND l.t0 <= ?""",
+               JOIN all_tokens t USING (mint) WHERE l.rule IN ('w1', 'n1', 'c1') AND l.status = 'signal' AND l.t0 <= ?""",
             (_iso(now - SCORE_AFTER),)).fetchall():
         t0 = datetime.fromisoformat(s["t0"])
         pool = json.loads(s["features"] or "{}").get("pair") or s["canonical_pool"]
@@ -399,8 +399,11 @@ def signal_message(rule: str, r: dict, f: dict, meta: dict | None) -> str:
                            alerts.link(m.get("website"), "Web"), alerts.link(m.get("community"), "Komunitas")) if x]
     ratio = f["vol1h"] / f["vol_avg"] if f.get("vol_avg") else None
     lines = [f"{RULES[rule]} · {rule} · SOL",
-             f"<b>{e(r['name'])}</b> (${e(r['symbol'])}) · graduate {f.get('age_days')} hari lalu",
+             f"<b>{e(r['name'])}</b> (${e(r['symbol'])})"
+             + (f" · umur {f['age_days']} hari" if f.get("age_days") is not None else ""),
              f"<code>{e(r['mint'])}</code>", ""]
+    if rule == "c1":
+        lines.append(f"📣 Disebut {f['channels']} channel dalam 30 mnt: " + e(", ".join(f.get("chats") or [])[:200]))
     if rule == "n1":
         lines.append(f"🗣 Kata <b>{e(f['word'])}</b>: {f['copies_3h']} token graduate dalam 3 jam "
                      f"(normal {f['expected_3h']:.1f}) · ini pemimpin volume dari {f['candidates']} token")
@@ -415,8 +418,9 @@ def signal_message(rule: str, r: dict, f: dict, meta: dict | None) -> str:
         + f" · 1j {alerts.pct(f.get('chg1h'))} · 5m {alerts.pct(f.get('chg5m'))}",
         f"🅑{f.get('buys', 0):.0f} Ⓢ{f.get('sells', 0):.0f} (1 jam)",
     ]
-    if fees.line(f):
-        lines.append(fees.line(f))
+    for extra in (fees.line(f), fees.flow_line(f)):
+        if extra:
+            lines.append(extra)
     if f.get("holders") is not None:
         lines.append(f"👥 {f['holders']} holder · Top10 {f['top10']:.1f}% · cluster {f.get('cluster', 0):.1f}%"
                      + (f" · pro trader {f['pro'] * 100:.0f}%" if f.get("pro") is not None else ""))
@@ -431,11 +435,14 @@ def signal_message(rule: str, r: dict, f: dict, meta: dict | None) -> str:
     return "\n".join(lines)
 
 
-def send_alerts(conn: sqlite3.Connection, tg: Telegram, client, rpc, now: datetime) -> dict:
+def send_alerts(conn: sqlite3.Connection, tg: Telegram, client, rpc, now: datetime,
+                rules: tuple[str, ...] = ("w1", "n1")) -> dict:
+    """Alerts of `rules` (each process sends only its own rules, so none is sent twice)."""
+    rin = ",".join(f"'{r}'" for r in rules if r in RULES)
     out = {"signal": 0, "result": 0}
     for r in conn.execute(
-            """SELECT l.*, t.name, t.symbol FROM live_signals l JOIN all_tokens t USING (mint)
-               WHERE l.rule IN ('w1', 'n1') AND l.status = 'signal' AND l.t0 >= ?
+            f"""SELECT l.*, t.name, t.symbol FROM live_signals l JOIN all_tokens t USING (mint)
+               WHERE l.rule IN ({rin}) AND l.status = 'signal' AND l.t0 >= ?
                  AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.mint = l.mint AND a.kind = l.rule || '_signal')""",
             (_iso(now - timedelta(minutes=30)),)).fetchall():
         try:
@@ -449,8 +456,8 @@ def send_alerts(conn: sqlite3.Connection, tg: Telegram, client, rpc, now: dateti
                      tg.send(text, alerts.fetch_image(client, (meta or {}).get("image"))))
         out["signal"] += 1
     for r in conn.execute(
-            """SELECT l.*, t.name, t.symbol FROM live_signals l JOIN all_tokens t USING (mint)
-               WHERE l.rule IN ('w1', 'n1') AND l.status = 'scored'
+            f"""SELECT l.*, t.name, t.symbol FROM live_signals l JOIN all_tokens t USING (mint)
+               WHERE l.rule IN ({rin}) AND l.status = 'scored'
                  AND EXISTS (SELECT 1 FROM alerts a WHERE a.mint = l.mint AND a.kind = l.rule || '_signal')
                  AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.mint = l.mint AND a.kind = l.rule || '_result')""").fetchall():
         alerts._mark(conn, r["mint"], f"{r['rule']}_result",

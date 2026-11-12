@@ -162,6 +162,11 @@ def main(argv: list[str] | None = None) -> int:
     dg.add_argument("--send", action="store_true")
     rv = sub.add_parser("review", help="weekly review: rejected tokens per reason vs labels, signals per rule")
     rv.add_argument("--send", action="store_true", help="send to Telegram instead of printing")
+    cl = sub.add_parser("calls", help="read Telegram call channels with a user account; signal c1")
+    tl = sub.add_parser("tg-login", help="log the Telegram user account in (step 1 --phone, step 2 --code)")
+    tl.add_argument("--phone")
+    tl.add_argument("--code")
+    tl.add_argument("--password")
     tr = sub.add_parser("trend", help="trend signals: w1 revival of old graduates, n1 narrative leader")
     tr.add_argument("--once", action="store_true")
     tr.add_argument("--every", type=int, default=120, help="seconds between revival checks")
@@ -380,6 +385,19 @@ def main(argv: list[str] | None = None) -> int:
             print("sent")
         else:
             print(text)
+    elif a.cmd == "tg-login":
+        import asyncio
+        from .calls import login
+        print(asyncio.run(login(conn, a.phone, a.code, a.password)))
+    elif a.cmd == "calls":
+        import asyncio
+        import httpx
+        from . import telegram
+        from .calls import run as run_calls
+        from .http import ApiClient
+        _, rpc, _, _ = clients()
+        with httpx.Client(timeout=20, follow_redirects=True, headers={"User-Agent": "runner-research"}) as client:
+            asyncio.run(run_calls(a.db, ApiClient(), rpc, telegram.from_env(), client))
     elif a.cmd == "trend":
         import httpx
         from . import telegram, trend

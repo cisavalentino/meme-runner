@@ -7,6 +7,7 @@ dependencies = ["httpx>=0.27"]
 
 [project.optional-dependencies]
 dune = ["dune-client>=1.7"]
+calls = ["telethon==1.36.0"]
 analysis = ["duckdb", "pandas", "scikit-learn", "lightgbm"]
 dev = ["pytest>=8"]
 

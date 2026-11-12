@@ -31,3 +31,14 @@ def test_check_and_line():
     assert fees.check({"fee_ratio": 0.0005}) and not fees.check({"fee_ratio": 0.005}) and not fees.check({})
     assert "perang tip" in fees.line({"fee_ratio": 0.2, "fee_swaps": 40})
     assert fees.line({}) is None
+
+
+def test_flow_counts_wallet_route_buys():
+    def buy(payer, src, sol):
+        return {"feePayer": payer, "source": src, "timestamp": 100,
+                "accountData": [{"account": payer, "nativeBalanceChange": -int(sol * 1e9), "tokenBalanceChanges": []},
+                                {"account": "a", "nativeBalanceChange": 0, "tokenBalanceChanges": [
+                                    {"userAccount": payer, "mint": MINT, "rawTokenAmount": {"tokenAmount": "10"}}]}]}
+    f = fees.flow([buy("a", "JUPITER", 0.2), buy("b", "PUMP_AMM", 2), buy("a", "OKX_DEX_ROUTER", 0.1), tx()], MINT)
+    assert f["flow_buys"] == 3 and f["flow_buyers"] == 2 and round(f["retail_share"], 2) == 0.67 and round(f["small_share"], 2) == 0.67
+    assert "wallet biasa" in fees.flow_line(f)

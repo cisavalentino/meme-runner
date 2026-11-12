@@ -26,6 +26,14 @@ def check(f: dict) -> list[str]:
     return [f"fee trader < {MIN_RATIO * 100:.1f}% volume (curiga volume palsu)"] if r is not None and r < MIN_RATIO else []
 
 
+def flow_line(f: dict) -> str | None:
+    if not f.get("flow_buys"):
+        return None
+    wave = " · 🧍 <b>gelombang retail</b>" if f.get("retail_share", 0) >= RETAIL_WAVE and f["flow_buys"] >= 8 else ""
+    return (f"🛒 {f['flow_buys']} beli terakhir dari {f.get('flow_buyers')} wallet · {f['retail_share'] * 100:.0f}% lewat wallet "
+            f"biasa · {f['small_share'] * 100:.0f}% beli &lt;{SMALL_BUY_SOL} SOL{wave}")
+
+
 def line(f: dict) -> str | None:
     r = f.get("fee_ratio")
     if r is None:
@@ -76,6 +84,40 @@ def enhanced_fee(t: dict, pool: str, mint: str) -> tuple[float, float] | None:
     return abs(pool_sol) / 1e9, ((t.get("fee") or 0) + tips) / 1e9
 
 
+RETAIL_SOURCES = {"JUPITER", "OKX_DEX_ROUTER", "DFLOW", "PHANTOM", "METAMASK", "COINBASE"}   # wallet swaps
+SMALL_BUY_SOL = 0.5
+RETAIL_WAVE = 0.4        # share of buys through wallet routes that marks a retail wave (KOL post, news)
+
+
+def buy_of(t: dict, mint: str) -> tuple[str, float] | None:
+    """(buyer, SOL spent) if the fee payer bought `mint` in this swap."""
+    payer = t.get("feePayer")
+    got = spent = 0
+    for a in t.get("accountData") or []:
+        tbc = a.get("tokenBalanceChanges") or []
+        if a["account"] == payer:
+            spent -= a.get("nativeBalanceChange") or 0
+        for c in tbc:
+            if c.get("userAccount") == payer:
+                amt = int(c["rawTokenAmount"]["tokenAmount"])
+                if c.get("mint") == mint:
+                    got += amt
+                elif c.get("mint") == WSOL:
+                    spent -= amt
+    return (payer, spent / 1e9) if got > 0 and payer else None
+
+
+def flow(txs: list[dict], mint: str) -> dict:
+    """Who is buying right now: unique buyers, share through wallet routes, small buys."""
+    buys = [(b, t.get("source")) for t in txs if not t.get("transactionError") and (b := buy_of(t, mint))]
+    if not buys:
+        return {"flow_buys": 0}
+    return {"flow_buys": len(buys), "flow_buyers": len({b[0] for b, _ in buys}),
+            "retail_share": sum(src in RETAIL_SOURCES for _, src in buys) / len(buys),
+            "small_share": sum(0 < b[1] < SMALL_BUY_SOL for b, _ in buys) / len(buys),
+            "flow_span_s": (txs[0].get("timestamp", 0) - txs[-1].get("timestamp", 0)) if txs else None}
+
+
 def fee_ratio(api, pool: str, mint: str, quote_mint: str | None = WSOL, n: int = 100) -> dict:
     """Fees paid / volume over the pool's recent swaps: one Helius enhanced
     transactions call (type=SWAP drops the many bot transactions that touch a
@@ -93,4 +135,4 @@ def fee_ratio(api, pool: str, mint: str, quote_mint: str | None = WSOL, n: int =
         if r:
             vol, fee, swaps = vol + r[0], fee + r[1], swaps + 1
     return {"fee_ratio": fee / vol if vol else None, "fee_swaps": swaps, "fee_volume_sol": round(vol, 3),
-            "fees_sol": round(fee, 4)}
+            "fees_sol": round(fee, 4), **flow(js if isinstance(js, list) else [], mint)}

@@ -196,6 +196,25 @@ CREATE TABLE IF NOT EXISTS ext_tokens (
     fetched_at TEXT
 );
 
+-- Token addresses called in Telegram channels/groups the user account reads (calls.py).
+CREATE TABLE IF NOT EXISTS tg_calls (
+    chat_id    INTEGER NOT NULL,
+    msg_id     INTEGER NOT NULL,
+    mint       TEXT NOT NULL,
+    chat_title TEXT,
+    posted_at  TEXT NOT NULL,
+    text       TEXT,
+    price0     REAL,                  -- DexScreener price at the call
+    mcap0      REAL,
+    price_1h   REAL,
+    price_6h   REAL,
+    price_24h  REAL,
+    max_seen   REAL,                  -- highest price seen while polling (every minute, 25h)
+    checked_at TEXT,
+    PRIMARY KEY (chat_id, msg_id, mint)
+);
+CREATE INDEX IF NOT EXISTS tg_calls_posted ON tg_calls (posted_at);
+
 -- pump.fun graduates + ext tokens with the columns the trend code uses.
 CREATE VIEW IF NOT EXISTS all_tokens AS
     SELECT mint, name, symbol, canonical_pool, graduated_at, creator, bonding_curve, bonding_minutes,
