@@ -159,7 +159,7 @@ def deep(rpc, accs: list[dict], exclude: set[str], mint: str, rng: random.Random
         probes.append({**a, **(c or {}), "top": a in top, "buy": c is not None})
     buys = [p for p in probes if p["buy"]]
     cl, n_linked = cluster_pct([p for p in probes if p["top"] and p["buy"]], total)
-    return {"probed": len(probes), "buys": len(buys), "pro_n": sum(p["pro"] for p in buys),
+    return {"probed": len(probes), "probe_buys": len(buys), "pro_n": sum(p["pro"] for p in buys),
             "pro": sum(p["pro"] for p in buys) / len(buys) if buys else None,
             "cluster": cl, "cluster_wallets": n_linked,
             "transfer_in": sum(1 for p in probes if p["top"] and not p["buy"])}
@@ -295,7 +295,7 @@ def signal_message(r: dict, f: dict, meta: dict | None, now: datetime) -> str:
         f"💸 MC {alerts.usd(f.get('entry_mcap'))} · Grad {alerts.usd(f.get('grad_mcap'))} · {alerts.mx(f.get('m_now'))}",
         f"👥 {f.get('holders')} holder di menit 1 · Top10 {f['top10']:.1f}%"
         + (f" · Dev {f['dev']:.1f}%" if f.get("dev") is not None else ""),
-        f"🧠 Pro trader {f['pro'] * 100:.0f}% ({f['pro_n']}/{f['buys']} pembeli dicek)",
+        f"🧠 Pro trader {f['pro'] * 100:.0f}% ({f['pro_n']}/{f.get('probe_buys', f.get('buys'))} pembeli dicek)",
         f"🕸 Cluster top holder {f['cluster']:.1f}% ({f['cluster_wallets']} wallet)"
         + (f" · {f['transfer_in']} top holder dapat token via transfer" if f.get("transfer_in") else ""),
     ]
