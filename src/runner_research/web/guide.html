@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Panduan Sinyal Runner</title>
+<meta name="robots" content="noindex">
+<style>
+/* layout: satu kolom bacaan + indeks lompat; contoh alert (gelembung Telegram) di samping tabel arti per baris */
+:root{color-scheme:light;--page:#f9f9f7;--card:#fff;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--ring:rgba(11,11,11,.10);--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--up:#006300;--down:#d03b3b;--warnink:#7a5200;--warnbg:#fff4dc;--head:#f4f4f1;--bubble:#eef3f8;--bubbleink:#1b2733;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--page:#0d0d0d;--card:#161615;--ink:#f0efec;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--ring:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--s3:#199e70;--up:#0ca30c;--down:#e66767;--warnink:#e0b04a;--warnbg:#2a2210;--head:#1c1c1b;--bubble:#17212b;--bubbleink:#dde6ee}}
+:root[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--card:#161615;--ink:#f0efec;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--ring:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--s3:#199e70;--up:#0ca30c;--down:#e66767;--warnink:#e0b04a;--warnbg:#2a2210;--head:#1c1c1b;--bubble:#17212b;--bubbleink:#dde6ee}
+*{box-sizing:border-box}
+html{scroll-padding-top:64px}
+body{margin:0;background:var(--page);color:var(--ink);font:15px/1.6 var(--sans)}
+a{color:var(--s1);text-decoration:none}a:hover{text-decoration:underline}
+a:focus-visible{outline:2px solid var(--s1);outline-offset:2px;border-radius:4px}
+.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--page) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--ring)}
+.top .in{max-width:1100px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{font-weight:700}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs a{padding:6px 12px;border-radius:999px;color:var(--ink2);font-size:14px}
+.tabs a.on{background:var(--ink);color:var(--page)}
+.tabs a:hover{text-decoration:none;background:var(--ring)}.tabs a.on:hover{background:var(--ink)}
+main{max-width:1100px;margin:0 auto;padding:0 max(16px,env(safe-area-inset-right,0px)) 64px max(16px,env(safe-area-inset-left,0px))}
+header{padding:32px 0 8px}
+h1{font-size:clamp(24px,3.2vw,32px);margin:0 0 8px;letter-spacing:-.02em;text-wrap:balance}
+h2{font-size:21px;margin:0 0 6px;letter-spacing:-.01em;text-wrap:balance}
+h3{font-size:15.5px;margin:22px 0 6px}
+p{margin:0 0 10px;max-width:72ch}
+.sub{color:var(--ink2);max-width:72ch}
+.toc{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 0;padding:0;list-style:none}
+.toc a{display:inline-block;padding:4px 11px;border:1px solid var(--ring);border-radius:999px;color:var(--ink2);font-size:13px}
+.toc a:hover{text-decoration:none;background:var(--head)}
+section{padding:36px 0 0;border-top:1px solid var(--grid);margin-top:36px}
+section:first-of-type{border-top:0;margin-top:8px}
+.lead{color:var(--ink2);margin-bottom:16px}
+/* aturan */
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:10px}
+.rl{background:var(--card);border:1px solid var(--ring);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.rl .code{font:600 12px var(--mono);color:var(--muted);letter-spacing:.04em}
+.rl b{font-size:14.5px}
+.rl span{color:var(--ink2);font-size:13px;line-height:1.5}
+.rl .when{margin-top:auto;padding-top:6px;font-size:12px;color:var(--muted)}
+.chip{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:999px;border:1px solid var(--ring);color:var(--ink2);white-space:nowrap}
+.chip.on{border-color:color-mix(in srgb,var(--up) 45%,transparent);color:var(--up)}
+.chip.mute{color:var(--muted)}
+/* contoh + tabel */
+.pair{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:820px){.pair{grid-template-columns:minmax(0,1fr)}}
+.bubble{background:var(--bubble);color:var(--bubbleink);border-radius:14px 14px 14px 4px;padding:12px 14px;font:12.5px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word;position:sticky;top:64px}
+@media (max-width:820px){.bubble{position:static}}
+.bubble .cap{display:block;font:600 11px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.scroll{overflow-x:auto;border:1px solid var(--ring);border-radius:10px;background:var(--card);min-width:0}
+table{border-collapse:collapse;width:100%;font-size:13.5px;line-height:1.5}
+th,td{padding:9px 12px;border-bottom:1px solid var(--grid);text-align:left;vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+th{background:var(--head);font-weight:600;color:var(--muted);font-size:11.5px;letter-spacing:.05em;text-transform:uppercase}
+td:first-child{font:12.5px var(--mono);white-space:nowrap;color:var(--ink)}
+td:nth-child(2){color:var(--ink2);min-width:140px}
+td:nth-child(3){min-width:200px}
+.ok{color:var(--up);font-weight:600}.bad{color:var(--down);font-weight:600}.mid{color:var(--warnink);font-weight:600}
+/* skala */
+.scale{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:10px;margin:8px 0 4px}
+.sc{background:var(--card);border:1px solid var(--ring);border-radius:10px;padding:12px 14px}
+.sc .v{font:600 18px var(--mono);letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.sc .t{font-size:13px;color:var(--ink2)}
+.sc.g .v{color:var(--up)}.sc.r .v{color:var(--down)}.sc.y .v{color:var(--warnink)}
+/* catatan */
+.note{background:var(--warnbg);color:var(--warnink);border-radius:10px;padding:10px 14px;font-size:13.5px;max-width:72ch;margin:12px 0}
+.note b{color:inherit}
+/* bandingkan */
+.vs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px;margin-top:10px}
+.vs > div{background:var(--card);border:1px solid var(--ring);border-radius:10px;padding:12px 16px;min-width:0}
+.vs h4{margin:0 0 6px;font-size:14.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.vs ul{margin:0;padding-left:18px;font-size:13.5px;color:var(--ink2)}
+.vs li{margin:2px 0}
+/* checklist */
+ol.check{list-style:none;counter-reset:c;padding:0;margin:8px 0 0;display:grid;gap:8px;max-width:820px}
+ol.check li{counter-increment:c;display:grid;grid-template-columns:28px 1fr;gap:12px;background:var(--card);border:1px solid var(--ring);border-radius:10px;padding:12px 14px}
+ol.check li::before{content:counter(c);width:26px;height:26px;border-radius:999px;background:var(--ink);color:var(--page);display:grid;place-items:center;font:700 12.5px var(--sans)}
+ol.check b{display:block}
+ol.check span{color:var(--ink2);font-size:13.5px}
+/* glosarium */
+dl.gl{display:grid;grid-template-columns:minmax(120px,180px) minmax(0,1fr);gap:10px 20px;margin:8px 0 0;max-width:900px}
+@media (max-width:560px){dl.gl{grid-template-columns:minmax(0,1fr);gap:2px}dl.gl dd{margin-bottom:10px}}
+dl.gl dt{font-weight:600}
+dl.gl dd{margin:0;color:var(--ink2);font-size:14px}
+ul.plain{margin:0 0 10px;padding-left:20px;max-width:72ch}
+ul.plain li{margin:3px 0}
+code{font:12.5px var(--mono);background:var(--head);padding:1px 5px;border-radius:4px}
+footer{margin-top:48px;color:var(--muted);font-size:12.5px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div class="top"><div class="in">
+  <span class="brand">Meme Runner Research</span>
+  <nav class="tabs"><a href="./">Insight</a><a href="runners.html">Daftar runner</a><a href="live.html">Live test</a><a class="on" href="guide.html">Panduan</a></nav>
+</div></div>
+<main>
+<header>
+  <h1>Cara membaca sinyal di Telegram</h1>
+  <p class="sub">Arti setiap baris di alert dan ringkasan harian, angka yang perlu diwaspadai, dan daftar cek sebelum menganggap sebuah sinyal serius. Semua sinyal masih paper trading, bukan saran beli.</p>
+  <ul class="toc">
+    <li><a href="#aturan">Lima aturan</a></li>
+    <li><a href="#tanda">PRIORITAS &amp; ⚠️</a></li>
+    <li><a href="#r2">Alert r2</a></li>
+    <li><a href="#w1">Alert w1</a></li>
+    <li><a href="#n1">Alert n1</a></li>
+    <li><a href="#fee">Fee &amp; arus beli</a></li>
+    <li><a href="#digest">Ringkasan harian</a></li>
+    <li><a href="#cek">Daftar cek</a></li>
+    <li><a href="#istilah">Istilah</a></li>
+  </ul>
+</header>
+
+<section id="aturan">
+  <h2>Lima aturan, lima pertanyaan berbeda</h2>
+  <p class="lead">Setiap aturan melihat token di waktu yang berbeda. Kalau dua aturan setuju pada token yang sama, sinyalnya jauh lebih kuat.</p>
+  <div class="rules">
+    <div class="rl"><span class="code">r2 · 🟢 SINYAL RUNNER</span><b>Bukti harga di menit 60</b><span>Token baru yang harganya 1,5–5x dari saat graduate setelah 1 jam, dengan filter anti-rug. Satu-satunya aturan yang sudah di-backtest.</span><span class="when"><span class="chip on">alert langsung</span> ±5 sinyal/hari</span></div>
+    <div class="rl"><span class="code">e1 · ⚡ MENIT 1</span><b>Siapa pembeli awal</b><span>60 detik setelah graduate: holder &gt;100, ≥50% pembeli lewat terminal pro, top10 ≤30%, creator ≤5%, cluster ≤15%.</span><span class="when"><span class="chip mute">ringkasan harian</span> berisik, ~86% jatuh</span></div>
+    <div class="rl"><span class="code">w1 · 🌊 KEBANGKITAN</span><b>Token lama hidup lagi</b><span>Umur &gt;1 hari, volume 1 jam ≥5x rata-rata per jam, harga 1 jam +50% s.d. +500%, beli &gt; jual, LP ≥$10k.</span><span class="when"><span class="chip on">alert langsung</span> belum di-backtest</span></div>
+    <div class="rl"><span class="code">n1 · 🔥 NARASI</span><b>Pemimpin tema yang ramai</b><span>Satu kata muncul di ≥4 token graduate dalam 3 jam (≥5x normal). Yang dikirim hanya token dengan volume terbesar, minimal 2x token kedua.</span><span class="when"><span class="chip on">alert langsung</span> belum di-backtest</span></div>
+    <div class="rl"><span class="code">c1 · 📣 CALL TELEGRAM</span><b>Disebut banyak channel</b><span>≥2 channel menyebut token yang sama dalam 30 menit. Kode sudah ada, tapi monitornya belum dijalankan.</span><span class="when"><span class="chip mute">belum aktif</span></span></div>
+  </div>
+</section>
+
+<section id="tanda">
+  <h2>Dua tanda yang dibaca paling dulu</h2>
+  <div class="vs">
+    <div>
+      <h4>🔴 PRIORITAS · juga lolos …</h4>
+      <p style="font-size:14px;color:var(--ink2)">Muncul di baris paling atas kalau aturan lain juga sudah memberi sinyal untuk token yang sama. Di ringkasan harian, tandanya tertulis <code>juga r2</code>. Dari data sejauh ini, hampir semua pemenang e1 (updog 17x, bro, Osaru) juga lolos r2.</p>
+    </div>
+    <div>
+      <h4>⚠️ … tidak dicek / belum tersedia</h4>
+      <p style="font-size:14px;color:var(--ink2)">Ada cek yang tidak jalan, biasanya karena GeckoTerminal membatasi permintaan. Ini <b>bukan</b> berarti aman. Buka GMGN dan lihat sendiri Bundler, Snipers, dan Top10.</p>
+      <ul style="font-size:13px;color:var(--ink2);margin:6px 0 0;padding-left:18px">
+        <li><code>lonjakan 1 candle tidak dicek</code></li>
+        <li><code>data holder belum tersedia</code></li>
+        <li><code>tanpa link X</code></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="r2">
+  <h2>Alert r2: token baru, dinilai di menit ke-60</h2>
+  <p class="lead">Contoh nyata dari 12 Nov 2026 (arigato), ditulis ulang dengan format terbaru.</p>
+  <div class="pair">
+<div class="bubble"><span class="cap">Contoh alert r2</span>🟢 SINYAL RUNNER · r2 · SOL
+arigato ($arigato) · ⏱1j00m · Graduated
+HEDuqMZYBdQz…dBfgpump
+
+💸 MC $42.7K · LP $14.8K
+📈 Grad $26.7K → 15m 1.90x → 60m 1.71x
+🔥 Vol1j $46.7K · 5m -2.6% · 1j +1.9%
+🅑1025 Ⓢ696 · 1.47× (1 jam)
+👥 –
+🔐 Mint ✅ · Freeze ✅ · Dev 0.0%
+💰 Dex paid ✅
+🕯 Lonjakan 1 candle maks – · ⏳ Bonding 7 mnt
+👤 Creator graduate sebelumnya: 0
+🚀 J7 Tracker
+🔗 𝕏
+⚠️ lonjakan 1 candle tidak dicek
+⚠️ data holder belum tersedia
+
+📊 Backtest Okt 2026: 21% jadi runner
+   · 29% ≥2x dari masuk</div>
+    <div class="scroll"><table>
+      <thead><tr><th>Baris</th><th>Arti</th><th>Yang diperhatikan</th></tr></thead>
+      <tbody>
+        <tr><td>⏱1j00m</td><td>Umur sejak graduate</td><td>Idealnya sekitar 1 jam. Kalau 2 jam atau lebih, alert tertahan menunggu data candle, dan angka backtest makin kurang berlaku.</td></tr>
+        <tr><td>MC · LP</td><td>Nilai pasar dan isi pool</td><td><b>LP kecil mudah digerakkan.</b> Dengan LP $26,8k, jual $2k sudah menjatuhkan harga sekitar 15%.</td></tr>
+        <tr><td>Grad → 15m → 60m</td><td>Harga di menit 15 dan 60 dibanding saat graduate</td><td>Inti r2. Zona sinyal <span class="ok">1,5–5x</span>. Makin dekat ke 5x, makin banyak kenaikan yang sudah terlewat.</td></tr>
+        <tr><td>Vol1j · 5m · 1j</td><td>Volume 1 jam, perubahan harga 5 menit dan 1 jam</td><td><span class="bad">5m merah tajam setelah 1j hijau</span> berarti mulai ada yang ambil untung. Jangan kejar candle hijau besar.</td></tr>
+        <tr><td>🅑 Ⓢ · rasio</td><td>Jumlah transaksi beli dan jual 1 jam</td><td><span class="ok">≥1,3x sehat</span>. <span class="mid">Mendekati 1,0x</span> artinya dorongan beli mulai habis.</td></tr>
+        <tr><td>👥 holder · Top10</td><td>Jumlah holder, porsi 10 dompet terbesar</td><td><span class="bad">Top10 &gt;30%</span> berbahaya. "–" artinya data belum ada.</td></tr>
+        <tr><td>Mint · Freeze</td><td>Apakah creator masih bisa mencetak token atau membekukan dompet</td><td>✅ artinya sudah dicabut. Token pump.fun selalu ✅.</td></tr>
+        <tr><td>Dev</td><td>Sisa pegangan creator</td><td>Mendekati 0% normal. <span class="bad">Di atas 5%</span>, creator bisa dump.</td></tr>
+        <tr><td>Dex paid</td><td>Tim membayar profil DexScreener</td><td>Sinyal lemah. Bisa tim serius, bisa juga persiapan pompa.</td></tr>
+        <tr><td>Lonjakan 1 candle</td><td>Kenaikan terbesar dalam satu candle 5 menit</td><td><span class="bad">≥20x langsung ditolak</span> (tanda bundle). "–" artinya tidak dicek, jadi lebih hati-hati.</td></tr>
+        <tr><td>Bonding</td><td>Lama dari token dibuat sampai graduate</td><td>Menit sampai jam itu normal. <span class="bad">0 detik</span> (instan) ditolak; 52% di antaranya rug.</td></tr>
+        <tr><td>Creator graduate</td><td>Token creator ini yang pernah graduate</td><td><span class="mid">≥4</span> berarti "pabrik token", dan peluang runner-nya lebih rendah.</td></tr>
+        <tr><td>🚀 tool</td><td>Tool yang dipakai untuk launch</td><td>Informasi saja.</td></tr>
+        <tr><td>🔗 sosial</td><td>Link sosial di metadata token</td><td><span class="bad">Tanpa X</span>, peluang runner di backtest turun dari 21% ke 12,5%.</td></tr>
+        <tr><td>📊 Backtest</td><td>Hasil aturan ini di data Oktober</td><td>Sekitar <b>7 dari 10 sinyal tidak sampai 2x</b>. Ini peluang, bukan kepastian.</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <h3>Contoh: dua sinyal r2 di hari yang sama</h3>
+  <div class="vs">
+    <div>
+      <h4>arigato <span class="chip on">lebih bersih</span></h4>
+      <ul>
+        <li>Masuk di 1,71x, masih awal di zona sinyal</li>
+        <li>Beli/jual 1,47x</li>
+        <li>Ada X, Dex paid</li>
+        <li>Kurang: data holder dan candle tidak tersedia</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Fly Cat (FLC) <span class="chip">lebih berisiko</span></h4>
+      <ul>
+        <li>Sudah 3,69x di menit 60, alert datang di umur 2 jam</li>
+        <li>Beli/jual 1,09x, hampir seimbang</li>
+        <li>5 menit terakhir −10% setelah 1 jam +54%</li>
+        <li>Tanpa link X</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="w1">
+  <h2>Alert w1: token lama yang hidup lagi</h2>
+  <p class="lead">w1 tahu sebuah token ramai lagi, tapi tidak tahu kenapa. Alasannya harus Anda cari di X.</p>
+  <div class="pair">
+<div class="bubble"><span class="cap">Contoh alert w1</span>🌊 KEBANGKITAN · w1 · SOL
+El Gato ($Gato) · umur 26.3 hari
+55A3VxMBfzw6…zzusbCU6pump
+
+💸 MC $196.0K · LP $48.2K
+🔥 Vol1j $29.1K · 12x rata-rata per jam
+   · 1j +148.0% · 5m +100.0%
+🅑… Ⓢ129 (1 jam)
+🧾 Fee trader …% dari volume
+🛒 … beli terakhir dari … wallet
+👥 4578 holder · Top10 23.0%
+   · cluster 7.6% · pro trader 31%
+📡 Ditemukan dari: pantauan likuiditas
+🔗 𝕏
+
+⚠️ Aturan baru, belum ada backtest.
+   Cek X: siapa yang memposting?</div>
+    <div class="scroll"><table>
+      <thead><tr><th>Baris</th><th>Arti</th><th>Yang diperhatikan</th></tr></thead>
+      <tbody>
+        <tr><td>umur</td><td>Hari sejak graduate</td><td>Token lama yang hidup lagi biasanya punya pemicu: postingan KOL atau berita.</td></tr>
+        <tr><td>Vol1j · Nx rata-rata</td><td>Volume 1 jam dibanding rata-rata per jam sebelumnya</td><td><b>Inti w1.</b> Makin tinggi kelipatannya, makin tiba-tiba. Lihat juga nilai dolarnya: $29k masih kecil, mihao tercatat di $196k.</td></tr>
+        <tr><td>1j · 5m</td><td>Perubahan harga</td><td><span class="bad">5m +100%</span> artinya Anda melihatnya di tengah satu candle yang melompat. Masuk di sini sering jadi pembeli puncak. Tunggu candle berikutnya.</td></tr>
+        <tr><td>🅑 Ⓢ</td><td>Transaksi beli dan jual 1 jam</td><td>w1 hanya memberi sinyal kalau beli lebih banyak dari jual.</td></tr>
+        <tr><td>holder · Top10 · cluster</td><td>Sebaran pemegang</td><td>Sehat kalau holder banyak, <span class="ok">Top10 &lt;30%</span>, <span class="ok">cluster &lt;15%</span>.</td></tr>
+        <tr><td>pro trader</td><td>Porsi pembeli lewat terminal atau bot</td><td>Untuk w1 ini informasi saja. Rendah justru bisa berarti retail yang datang.</td></tr>
+        <tr><td>📡 Ditemukan dari</td><td>Jalur yang menemukan token</td><td><span class="mid">trending</span> berarti sudah ramai di GeckoTerminal atau DexScreener, jadi kemungkinan sudah telat. <i>pantauan likuiditas</i> lebih awal.</td></tr>
+        <tr><td>Cek X</td><td>Langkah wajib</td><td>Klik "Cari di X". Ada KOL atau berita jelas: sinyal lebih kuat. Tidak ada apa-apa: bisa jadi pompa bot.</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<section id="n1">
+  <h2>Alert n1: pemimpin narasi</h2>
+  <p class="lead">Saat banyak token baru memakai kata yang sama, biasanya hanya satu yang benar-benar naik. n1 mengirim token dengan volume terbesar di tema itu.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Baris</th><th>Arti</th><th>Yang diperhatikan</th></tr></thead>
+    <tbody>
+      <tr><td>🗣 Kata …: N token</td><td>Berapa token graduate dengan kata ini dalam 3 jam, dibanding normalnya</td><td>Makin jauh di atas normal, makin kuat temanya. "pemimpin volume dari N token" menunjukkan seberapa ramai persaingannya.</td></tr>
+      <tr><td>📰 N berita 48 jam</td><td>Judul Google News yang memuat kata itu</td><td>Ada berita: narasi datang dari luar crypto (seperti kasus Jensen Huang). "Tidak ada berita": narasi dari dalam crypto, perlu cek X.</td></tr>
+      <tr><td>MC · LP · Vol · 🅑 Ⓢ</td><td>Sama seperti w1</td><td>Baca dengan cara yang sama: hati-hati dengan 5m hijau besar dan LP kecil.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="fee">
+  <h2>Dua baris baru: fee trader dan arus beli</h2>
+  <p class="lead">Muncul di alert w1, n1, dan e1. Dihitung dari 100 swap terakhir di pool token itu.</p>
+  <h3>🧾 Fee trader x% dari volume</h3>
+  <p>Trader sungguhan membayar priority fee, tip Jito, dan fee terminal (Axiom, dan lain-lain). Bot pencuci volume hampir tidak membayar apa-apa. Fee protokol dan fee creator tidak dihitung, karena semua orang membayarnya.</p>
+  <div class="scale">
+    <div class="sc r"><div class="v">&lt; 0,1%</div><div class="t">Curiga volume palsu. Token ditolak.</div></div>
+    <div class="sc g"><div class="v">0,3–1%</div><div class="t">Normal untuk token yang diperdagangkan orang sungguhan.</div></div>
+    <div class="sc y"><div class="v">&gt; 10%</div><div class="t">Perang tip bot sniper. Peringatan saja. DihcityCoin 21%, lalu −84%.</div></div>
+  </div>
+  <h3>🛒 Beli terakhir · % lewat wallet biasa · % beli &lt;0,5 SOL</h3>
+  <p>Siapa yang sedang membeli: berapa transaksi beli dan berapa wallet berbeda, berapa persen lewat swap wallet biasa (Phantom, Jupiter, OKX, dan sejenisnya), dan berapa persen pembelian kecil di bawah 0,5 SOL.</p>
+  <p>Kalau ≥40% lewat wallet biasa dari minimal 8 pembelian, alert menulis <b>🧍 gelombang retail</b>. Ini tanda orang biasa berdatangan, misalnya setelah ada postingan KOL. Review mingguan akan membandingkan hasil sinyal yang punya tanda ini dengan yang tidak.</p>
+</section>
+
+<section id="digest">
+  <h2>Ringkasan harian (00:30 UTC)</h2>
+  <p class="lead">e1 terlalu berisik untuk dikirim satu per satu, jadi hasilnya dikumpulkan dalam satu pesan per hari.</p>
+  <div class="pair">
+<div class="bubble"><span class="cap">Contoh ringkasan</span>RINGKASAN HARIAN · 12 Nov 2026
+
+⚡ e1 (menit 1): 111 sinyal dalam 24 jam
+Sekarang: 3 ≥2x · 4 1–2x
+        · 9 0,5–1x · 95 &lt;0,5x
+• $updog 17x · MC $796.6K · juga r2
+• $bro 2.63x · MC $66.1K · juga r2
+• $Osaru 2.33x · MC $28.8K · juga r2
+• $ELON 1.44x · MC $2.8K
+• $HUNG 1.15x · MC $2.7K
+…
+📨 Alert langsung kemarin:
+   e1 111 · n1 3 · r2 30 · w1 12</div>
+    <div>
+      <ul class="plain">
+        <li><b>Baris "Sekarang"</b> adalah rapor e1: dari semua token yang lolos di menit 1, berapa yang sekarang naik dan berapa yang jatuh. Pada contoh ini 95 dari 111 sudah turun lebih dari separuh. e1 sendirian tidak bisa dipakai untuk beli.</li>
+        <li><b>Daftar token</b> adalah 10 terbaik, diurutkan dari kelipatan sekarang terhadap harga saat sinyal.</li>
+        <li><b>"juga r2"</b> adalah pola terpenting. Pemenang e1 hampir selalu juga lolos r2.</li>
+        <li><b>MC sangat kecil</b> (ELON $2,8k, HUNG $2,7k) artinya token sudah hampir mati. Kelipatan di MC sekecil itu tidak berarti apa-apa.</li>
+        <li><b>"Alert langsung kemarin"</b> menghitung alert yang benar-benar terkirim. Karena e1 sudah dibisukan, angka e1 di baris ini akan 0 mulai 13 Nov.</li>
+      </ul>
+      <div class="note"><b>Review mingguan</b> (Rabu 01:00 UTC) melihat token yang ditolak tiap aturan setelah 72 jam. Kalau token yang ditolak karena satu alasan ternyata sering jadi runner, batas itu perlu dilonggarkan.</div>
+    </div>
+  </div>
+</section>
+
+<section id="cek">
+  <h2>Daftar cek sebelum menganggap sinyal serius</h2>
+  <ol class="check">
+    <li><div><b>Ada 🔴 PRIORITAS, atau "juga r2" di ringkasan?</b><span>Dua aturan yang setuju jauh lebih kuat daripada satu.</span></div></li>
+    <li><div><b>Ada ⚠️ "tidak dicek" atau "belum tersedia"?</b><span>Buka GMGN dan cek sendiri Bundler, Snipers, dan Top10.</span></div></li>
+    <li><div><b>Beli/jual ≥1,3x dan 5 menit tidak merah tajam?</b><span>Hindari juga masuk di candle 5 menit yang sedang hijau besar.</span></div></li>
+    <li><div><b>LP cukup untuk ukuran posisi Anda?</b><span>Aturan kasar: posisi tidak lebih dari 1% LP. LP $20k berarti maksimal sekitar $200.</span></div></li>
+    <li><div><b>Untuk w1 dan n1: ada alasan di X atau berita?</b><span>Tanpa alasan yang jelas, kenaikan bisa jadi pompa bot.</span></div></li>
+    <li><div><b>Tetap paper trading dulu.</b><span>Sampai hasil 72 jam terkumpul dan review mingguan menunjukkan aturannya bekerja.</span></div></li>
+  </ol>
+</section>
+
+<section id="istilah">
+  <h2>Istilah</h2>
+  <dl class="gl">
+    <dt>Graduate</dt><dd>Token pump.fun yang bonding curve-nya penuh, lalu pindah ke pool DEX (PumpSwap). Titik nol semua aturan token baru.</dd>
+    <dt>MC (market cap)</dt><dd>Harga × total supply. Untuk meme coin, angka ini mudah terlihat besar karena supply-nya besar dan likuiditasnya tipis.</dd>
+    <dt>LP (likuiditas)</dt><dd>Isi pool: SOL dan token yang tersedia untuk ditukar. Menentukan seberapa besar harga bergerak saat ada beli atau jual. LP kecil berarti harga mudah didorong naik, dan mudah dijatuhkan.</dd>
+    <dt>Volume 1 jam / 24 jam</dt><dd>Total nilai beli dan jual dalam rentang itu. Volume besar dengan LP kecil berarti token diperdagangkan bolak-balik dengan cepat. Volume tinggi bisa palsu, makanya ada cek fee trader.</dd>
+    <dt>B/S (beli/jual)</dt><dd>Perbandingan jumlah transaksi beli dan jual. Menghitung transaksi, bukan nilai dolar.</dd>
+    <dt>Top10</dt><dd>Porsi supply yang dipegang 10 dompet terbesar. Pool likuiditas tidak dihitung.</dd>
+    <dt>Cluster</dt><dd>Porsi supply di dompet-dompet top 15 yang membeli di slot yang sama atau ditandatangani dompet yang sama. Tanda satu orang memakai banyak dompet.</dd>
+    <dt>Pro trader</dt><dd>Pembeli yang memakai terminal trading (Axiom, Photon, BullX, dan sejenisnya) atau bot, dilihat dari program yang dipakai atau fee yang dibayar.</dd>
+    <dt>Bundle</dt><dd>Creator membeli banyak di transaksi peluncuran lewat banyak dompet, lalu menjual sekaligus. Terlihat sebagai lonjakan besar dalam satu candle.</dd>
+    <dt>Runner</dt><dd>Label setelah 72 jam untuk token yang naik jauh dan bertahan (slow_climb atau runner_other).</dd>
+    <dt>Rug</dt><dd>Label untuk token yang jatuh hampir habis setelah creator atau orang dalam menjual.</dd>
+    <dt>Masuk sebagai LP</dt><dd>Diuji di data kita: menyediakan likuiditas setelah token mencapai ATH rata-rata rugi di semua pengaturan (0,61–0,88x). Fee yang didapat tidak menutup penurunan harga.</dd>
+  </dl>
+</section>
+
+<footer>Meme Runner Research · Panduan diperbarui 12 Nov 2026. Semua sinyal adalah paper trading, bukan saran beli.</footer>
+</main>
+</body>
+</html>

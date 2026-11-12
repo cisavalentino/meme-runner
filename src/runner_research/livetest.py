@@ -416,6 +416,7 @@ def write(conn: sqlite3.Connection, out: str | Path, now: datetime, prices: dict
     tmp.write_text(json.dumps(js, ensure_ascii=False, separators=(",", ":")))
     tmp.replace(out / "live.json")
     (out / "live.html").write_text((Path(__file__).parent / "web" / "live.html").read_text())
+    (out / "guide.html").write_text((Path(__file__).parent / "web" / "guide.html").read_text())
     return len(js["signals"])
 
 
