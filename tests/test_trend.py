@@ -82,3 +82,21 @@ def test_score_from_ohlcv(conn):
     assert trend.score(conn, G(), NOW + timedelta(hours=73)) == 1
     o = json.loads(conn.execute("SELECT outcome FROM live_signals WHERE rule = 'w1'").fetchone()[0])
     assert o["max_mult"] > 3
+
+
+def test_quota_skips_without_rejecting(conn, monkeypatch):
+    add(conn, "OLD")
+
+    def no_quota(*a, **k):
+        raise trend.QuotaExhausted
+    monkeypatch.setattr(trend, "holder_check", no_quota)
+    api = FakeApi({"OLD": pair("OLD")}, trending=["OLD"])
+    out = trend.revival_step(conn, api, object(), NOW)
+    assert out["quota"] and conn.execute("SELECT COUNT(*) FROM live_signals").fetchone()[0] == 0
+    monkeypatch.setattr(trend, "holder_check", lambda *a, **k: ({"top10": 50}, ["top10 > 30%"]))
+    assert trend.revival_step(conn, api, object(), NOW)["signal"] == 0
+    calls = []
+    monkeypatch.setattr(trend, "holder_check", lambda *a, **k: calls.append(1) or ({}, []))
+    trend.revival_step(conn, api, object(), NOW + timedelta(hours=1))          # rejected recently: not rechecked
+    assert not calls
+    assert trend.revival_step(conn, api, object(), NOW + timedelta(hours=7))["signal"] == 1 and calls

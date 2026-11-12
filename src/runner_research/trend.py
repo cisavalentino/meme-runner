@@ -45,7 +45,9 @@ NARR_MIN = 4                 # graduations with the word in the window
 NARR_SPIKE = 5.0             # vs the word's rate in the previous 7 days
 NARR_COOLDOWN = timedelta(hours=24)
 LEAD_MARGIN = 2.0            # leader's 1h volume vs the runner-up
-DEEP_PER_DAY = 40            # holder checks (RPC) per day for w1 + n1
+DEEP_PER_DAY = 150           # holder checks per day for w1 + n1 (top 15 holders only, ~32 RPC calls each)
+RECHECK = timedelta(hours=6)  # a rejected w1 token is checked again after this
+NARR_RETRY = timedelta(minutes=30)  # a word whose leader was rejected is looked at again after this
 SCORE_AFTER = livetest.SCORE_AFTER
 NEWS_URL = "https://news.google.com/rss/search"
 RULES = {"w1": "🌊 KEBANGKITAN", "n1": "🔥 NARASI"}
@@ -127,17 +129,24 @@ def revival_reasons(p: dict | None, graduated_at: datetime, now: datetime) -> li
     return why
 
 
+class QuotaExhausted(Exception):
+    """No holder checks left today: the token is skipped, not rejected, and tried again later."""
+
+
 def holder_check(conn, rpc, tok, rng=None) -> tuple[dict, list[str]]:
-    """e1's top-holder checks (no holder-count or pro-trader limit)."""
+    """e1's top-holder checks (no holder-count or pro-trader limit). Only the
+    top holders are probed: w1/n1 do not use the pro-trader share."""
+    if rpc is None:
+        return {}, []
     key = f"trend_deep_{datetime.now():%Y-%m-%d}"
     used = int(db.get_state(conn, key) or 0)
-    if rpc is None or used >= DEEP_PER_DAY:
-        return {}, ([] if rpc is None else ["kuota cek holder habis"])
+    if used >= DEEP_PER_DAY:
+        raise QuotaExhausted
     db.set_state(conn, key, str(used + 1))
     exclude = {tok["canonical_pool"], tok["bonding_curve"]}
     accs = early.token_accounts(rpc, tok["mint"])
     f = early.holder_stats(accs, exclude, tok["creator"])
-    f.update(early.deep(rpc, accs, exclude, tok["mint"], rng or random.Random()))
+    f.update(early.deep(rpc, accs, exclude, tok["mint"], rng or random.Random(), sample=0))
     why = []
     if f["top10"] > early.MAX_TOP10:
         why.append(f"top10 > {early.MAX_TOP10:.0f}%")
@@ -169,9 +178,12 @@ def _tok(conn, mint: str):
     return conn.execute("SELECT * FROM tokens WHERE mint = ?", (mint,)).fetchone()
 
 
-def _done(conn, mint: str, rule: str) -> bool:
-    return conn.execute("SELECT 1 FROM live_signals WHERE mint = ? AND rule = ? AND status != 'rejected'",
-                        (mint, rule)).fetchone() is not None
+def _done(conn, mint: str, rule: str, now: datetime | None = None) -> bool:
+    """Signalled already, or rejected less than RECHECK ago (each check costs RPC)."""
+    r = conn.execute("SELECT status, updated_at FROM live_signals WHERE mint = ? AND rule = ?", (mint, rule)).fetchone()
+    if r is None:
+        return False
+    return r["status"] != "rejected" or (now is not None and now - datetime.fromisoformat(r["updated_at"]) < RECHECK)
 
 
 # ---------------------------------------------------------------- w1 revival
@@ -190,7 +202,7 @@ def revival_step(conn: sqlite3.Connection, api, rpc, now: datetime) -> dict:
             alive.pop(m)
             continue
         tok = _tok(conn, m)
-        if tok is None or _done(conn, m, "w1"):
+        if tok is None or _done(conn, m, "w1", now):
             continue
         why = revival_reasons(p, datetime.fromisoformat(tok["graduated_at"]), now)
         if why:
@@ -200,6 +212,9 @@ def revival_step(conn: sqlite3.Connection, api, rpc, now: datetime) -> dict:
         try:
             hf, why = holder_check(conn, rpc, tok)
             f.update(hf)
+        except QuotaExhausted:
+            out["quota"] = True
+            continue
         except Exception as ex:
             log.warning("holders %s: %s", m, ex)
             why = [f"error RPC: {type(ex).__name__}"]
@@ -256,8 +271,8 @@ def news(api, word: str, now: datetime) -> dict:
 def narrative_step(conn: sqlite3.Connection, api, rpc, now: datetime) -> dict:
     out = {"words": 0, "signal": 0}
     for w, n, exp in spiking_words(conn, now)[:5]:
-        last = db.get_state(conn, f"narr_{w}")
-        if last and now - datetime.fromisoformat(last) < NARR_COOLDOWN:
+        until = db.get_state(conn, f"narr_until_{w}")
+        if until and now < datetime.fromisoformat(until):
             continue
         out["words"] += 1
         cands = [r for r in conn.execute(
@@ -288,10 +303,13 @@ def narrative_step(conn: sqlite3.Connection, api, rpc, now: datetime) -> dict:
             try:
                 hf, why = holder_check(conn, rpc, lead)
                 f.update(hf)
+            except QuotaExhausted:
+                out["quota"] = True
+                continue
             except Exception as ex:
                 log.warning("holders %s: %s", lead["mint"], ex)
                 why = [f"error RPC: {type(ex).__name__}"]
-        db.set_state(conn, f"narr_{w}", _iso(now))
+        db.set_state(conn, f"narr_until_{w}", _iso(now + (NARR_RETRY if why else NARR_COOLDOWN)))
         _store(conn, lead["mint"], "n1", now, "rejected" if why else "signal", why, f)
         out["signal"] += not why
     return out

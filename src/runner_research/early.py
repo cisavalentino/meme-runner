@@ -140,7 +140,7 @@ def cluster_pct(probes: list[dict], total: int) -> tuple[float, int]:
     return sum(amt[o] for o in linked) / (total or 1) * 100, len(linked)
 
 
-def deep(rpc, accs: list[dict], exclude: set[str], mint: str, rng: random.Random) -> dict:
+def deep(rpc, accs: list[dict], exclude: set[str], mint: str, rng: random.Random, sample: int = SAMPLE_PROBE) -> dict:
     total = sum(a["amount"] for a in accs)
     by_owner = {}
     for a in sorted(accs, key=lambda a: -a["amount"]):
@@ -148,9 +148,9 @@ def deep(rpc, accs: list[dict], exclude: set[str], mint: str, rng: random.Random
             by_owner.setdefault(a["owner"], a)
     ranked = list(by_owner.values())
     top, rest = ranked[:TOP_PROBE], ranked[TOP_PROBE:]
-    sample = rng.sample(rest, min(SAMPLE_PROBE, len(rest)))
+    picked = rng.sample(rest, min(sample, len(rest)))
     probes = []
-    for a in top + sample:
+    for a in top + picked:
         try:
             c = classify(first_buy(rpc, a["address"]), a["owner"], mint)
         except Exception as ex:
